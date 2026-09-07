@@ -92,6 +92,14 @@
     #stockList .stock-item { min-width:0; margin-bottom:4px; }
     #poolList { max-height:none; }
     .wrap { padding:0; }
+    /* iOS风格滑动切换过渡 */
+    .wrap.swiping { will-change:transform,opacity; }
+    .wrap.swipe-out { transition:transform .18s cubic-bezier(.4,0,1,1), opacity .18s ease; opacity:0; }
+    .wrap.swipe-out.to-left { transform:translateX(-14%); }
+    .wrap.swipe-out.to-right { transform:translateX(14%); }
+    .wrap.swipe-from-left { transform:translateX(-14%); opacity:0; }
+    .wrap.swipe-from-right { transform:translateX(14%); opacity:0; }
+    .wrap.swipe-in { transition:transform .26s cubic-bezier(0,0,.2,1), opacity .26s ease; transform:translateX(0); opacity:1; }
     h1 { display:none; }        /* 标题移到hero */
     .sub { display:none; }      /* 更新时间移到更多 */
     .ctrl { display:none; }     /* 控制栏移到更多 */
@@ -932,15 +940,33 @@ document.querySelectorAll('.m-tab').forEach(b=>b.addEventListener('click', ()=>s
 (function(){
   let sx=0, sy=0, moved=false;
   const hint=document.getElementById('swipeHint');
+  const wrap=document.querySelector('.wrap');
+  let animating=false;
   function go(dir){  // dir=1下一只, -1上一只
     const list=swipeList||watchList; if(!list||!list.length) return;
+    if(animating) return;
     let i=list.findIndex(x=>x.code===CODE); if(i<0) i=0;
     let ni=(i+dir+list.length)%list.length;
     const s=list[ni];
     hint.textContent=(dir>0?'▶ ':'◀ ')+s.name;
     hint.style[dir>0?'right':'left']='20px'; hint.style[dir>0?'left':'right']='auto';
     hint.classList.add('show'); setTimeout(()=>hint.classList.remove('show'),800);
-    switchStock(s.code);
+    // iOS风格: 旧内容朝滑动方向滑出淡出 → 切数据 → 新内容从对侧滑入
+    if(!wrap || window.innerWidth>768){ switchStock(s.code); return; }
+    animating=true;
+    const outCls = dir>0 ? 'to-left' : 'to-right';   // 下一只:向左滑出
+    const fromCls = dir>0 ? 'swipe-from-right' : 'swipe-from-left';
+    wrap.classList.add('swiping','swipe-out',outCls);
+    setTimeout(()=>{
+      switchStock(s.code);                            // 换数据(update异步重绘)
+      wrap.classList.remove('swipe-out',outCls);
+      wrap.classList.add(fromCls);                    // 放到对侧起点
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        wrap.classList.remove(fromCls);
+        wrap.classList.add('swipe-in');               // 滑入归位
+        setTimeout(()=>{ wrap.classList.remove('swipe-in','swiping'); animating=false; }, 280);
+      }));
+    }, 180);
   }
   document.addEventListener('touchstart', e=>{
     if(window.innerWidth>768 || document.body.dataset.view!=='board') return;
