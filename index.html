@@ -1149,15 +1149,22 @@ document.querySelectorAll('.m-tab').forEach(b=>b.addEventListener('click', ()=>s
     }, 180);
   }
   document.addEventListener('touchstart', e=>{
-    if(window.innerWidth>768 || document.body.dataset.view!=='board') return;
+    if(window.innerWidth>768) return;
     sx=e.touches[0].clientX; sy=e.touches[0].clientY; moved=false;
   }, {passive:true});
   document.addEventListener('touchend', e=>{
-    if(window.innerWidth>768 || document.body.dataset.view!=='board') return;
+    if(window.innerWidth>768) return;
     const dx=e.changedTouches[0].clientX-sx, dy=e.changedTouches[0].clientY-sy;
-    // 图表区内滑动交给十字光标, 不切股票
+    const horiz = Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*1.5;
+    if(!horiz) return;
+    // 非盯盘视图: 向右滑返回盯盘(iOS返回习惯)
+    if(document.body.dataset.view!=='board'){
+      if(dx>0) setView('board');
+      return;
+    }
+    // 盯盘视图: 图表区内滑动交给十字光标, 不切股票
     if(e.target.id==='chart'||e.target.id==='rsiChart') return;
-    if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*1.5){ go(dx<0?1:-1); }
+    go(dx<0?1:-1);
   }, {passive:true});
 })();
 
