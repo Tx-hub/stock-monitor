@@ -100,6 +100,9 @@
     .wrap.swipe-from-left { transform:translateX(-14%); opacity:0; }
     .wrap.swipe-from-right { transform:translateX(14%); opacity:0; }
     .wrap.swipe-in { transition:transform .26s cubic-bezier(0,0,.2,1), opacity .26s ease; transform:translateX(0); opacity:1; }
+    /* iOS风格底部Tab切换: 淡入上移 */
+    .view-enter { animation:viewEnter .28s cubic-bezier(0,0,.2,1) both; }
+    @keyframes viewEnter { from{ opacity:0; transform:translateY(10px); } to{ opacity:1; transform:translateY(0); } }
     h1 { display:none; }        /* 标题移到hero */
     .sub { display:none; }      /* 更新时间移到更多 */
     .ctrl { display:none; }     /* 控制栏移到更多 */
@@ -933,6 +936,11 @@ function setView(view){
   }
   if(view==='pool'){ renderPool(); refreshPool(); }
   if(view==='board'){ setTimeout(()=>{ if(chartState) drawChart(chartState.ticks, chartState.pc); }, 50); }
+  // iOS风格进入动画: 当前视图容器淡入上移(仅手机端)
+  if(window.innerWidth<=768){
+    const target = (view==='watch'||view==='pool') ? document.querySelector('.sidebar') : document.querySelector('.wrap');
+    if(target){ target.classList.remove('view-enter'); void target.offsetWidth; target.classList.add('view-enter'); }
+  }
 }
 document.querySelectorAll('.m-tab').forEach(b=>b.addEventListener('click', ()=>setView(b.dataset.view)));
 
