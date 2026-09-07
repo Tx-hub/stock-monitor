@@ -270,6 +270,7 @@
 let CODE = 'sz002384';
 let timer = null, auto = true, lastPrice = null;
 let chartState = null;  // 存储最近一次绘图数据供tooltip使用
+let swipeList = null;   // 当前左右滑动所属列表(自选 or 股票池打平), null时回退watchList
 
 // ===== 自选股列表管理 =====
 const DEFAULT_LIST = [
@@ -370,7 +371,8 @@ function switchStock(code){
   CODE=code;
   lastPrice=null; chartState=null;
   let s=watchList.find(x=>x.code===code);
-  if(!s){ for(const g of STOCK_POOL){ const f=g.items.find(x=>x.code===code); if(f){ s=f; break; } } }
+  if(s){ swipeList=watchList; }  // 来自自选: 滑动在自选列表内切
+  else{ for(const g of STOCK_POOL){ const f=g.items.find(x=>x.code===code); if(f){ s=f; swipeList=STOCK_POOL.flatMap(g=>g.items); break; } } }
   document.getElementById('mainTitle').textContent=(s?s.name:code)+' · TradingAgents 做T盯盘';
   updateListPrices();
   const poolVisible = document.getElementById('tabPool').offsetParent!==null;
@@ -930,10 +932,9 @@ document.querySelectorAll('.m-tab').forEach(b=>b.addEventListener('click', ()=>s
 (function(){
   let sx=0, sy=0, moved=false;
   const hint=document.getElementById('swipeHint');
-  function curIndex(){ return watchList.findIndex(x=>x.code===CODE); }
   function go(dir){  // dir=1下一只, -1上一只
-    const list=watchList; if(!list.length) return;
-    let i=curIndex(); if(i<0) i=0;
+    const list=swipeList||watchList; if(!list||!list.length) return;
+    let i=list.findIndex(x=>x.code===CODE); if(i<0) i=0;
     let ni=(i+dir+list.length)%list.length;
     const s=list[ni];
     hint.textContent=(dir>0?'▶ ':'◀ ')+s.name;
