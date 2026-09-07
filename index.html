@@ -947,7 +947,7 @@ document.getElementById('btnAuto').onclick=function(){
 // ⚠️ 安全提醒: 本Key硬编码在公开仓库, 会明文暴露、可能被盗刷。请为该Key设用量上限, 必要时轮换。
 const ARK_URL = 'https://www.mofas.one/v1/chat/completions';
 const ARK_KEY = 'sk-4PK0sGsMmcaxFEQBVJ8LxOCeMsCJGrRFgwKbZLZ9fuMOe9vq';
-const ARK_MODEL = 'grok-4.5';
+const ARK_MODEL = 'grok-4.6';
 
 // 流式调用(OpenAI chat.completions SSE), 每收到正文delta回调onDelta
 async function callArkStream(instructions, input, onDelta){
