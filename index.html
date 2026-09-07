@@ -98,17 +98,21 @@
     #metricGrid { display:none;}/* 6宫格指标隐藏, 用hero+折叠 */
 
     /* 决策卡 hero */
-    .m-hero { display:block; background:#fff; padding:14px 14px 12px; border-bottom:1px solid #eef1f5; position:sticky; top:0; z-index:20; }
+    .m-hero { display:block; background:#fff; padding:12px 14px 10px; border-bottom:1px solid #eef1f5; position:sticky; top:0; z-index:20; }
+    .m-name { font-size:15px; font-weight:600; color:#1a2733; margin-bottom:4px; }
+    .m-name span { font-size:11px; color:#8a94a6; font-weight:400; margin-left:5px; }
     .m-hero-top { display:flex; align-items:baseline; gap:10px; }
-    .m-price { font-size:34px; font-weight:700; line-height:1; }
-    .m-chg { font-size:18px; font-weight:600; }
-    .m-levels { display:flex; gap:6px; margin-top:10px; }
-    .m-levels div { flex:1; text-align:center; background:#f5f7fa; border-radius:7px; padding:6px 2px; font-size:11px; color:#8a94a6; }
+    .m-price { font-size:32px; font-weight:700; line-height:1; }
+    .m-chg { font-size:17px; font-weight:600; }
+    .m-levels { display:flex; gap:6px; margin-top:8px; }
+    .m-levels div { flex:1; text-align:center; background:#f5f7fa; border-radius:7px; padding:5px 2px; font-size:11px; color:#8a94a6; }
     .m-levels div b { display:block; font-size:14px; margin-top:2px; color:#1a2733; }
 
     .panel { border-radius:0; border-left:none; border-right:none; margin-bottom:8px; padding:12px 14px; }
+    #signalPanel { margin-bottom:6px; padding:8px 14px; }
     #signalPanel h2 { display:none; }
-    .signal { font-size:15px; padding:12px; }
+    #signalPanel .levels { display:none; }  /* 隐藏重复的关键位(hero已有) */
+    .signal { font-size:14px; padding:10px 12px; line-height:1.5; }
     #chartPanel h2 { font-size:11px; color:#8a94a6; }
     #chart { height:300px; }     /* 图表放大 */
     #rsiChart { height:110px; }
@@ -206,6 +210,7 @@
 
   <!-- 手机端专用: 决策卡头部(桌面隐藏) -->
   <div class="m-hero" id="mHero">
+    <div class="m-name" id="mName">—</div>
     <div class="m-hero-top">
       <div class="m-price" id="mPrice">—</div>
       <div class="m-chg" id="mChg">—</div>
@@ -845,6 +850,8 @@ async function update(){
     document.getElementById('lvS').textContent=fmt(lo);
 
     // 手机端决策卡 hero
+    const curName=(watchList.find(x=>x.code===CODE)||{}).name || (p[1]||CODE);
+    document.getElementById('mName').innerHTML=curName+'<span>'+CODE.toUpperCase()+'</span>';
     const mp=document.getElementById('mPrice'); mp.textContent=fmt(price); mp.className='m-price '+cls;
     const mc=document.getElementById('mChg'); mc.textContent=(chg>0?'+':'')+chg.toFixed(2)+'%'; mc.className='m-chg '+cls;
     document.getElementById('mLevels').innerHTML=
