@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>东山精密 002384 · TradingAgents 做T盯盘</title>
+<title>TradingAgents 做T盯盘</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family: -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:#f5f7fa; color:#2c3e50; padding:12px; }
@@ -851,6 +851,7 @@ async function update(){
 
     // 手机端决策卡 hero
     const curName=(watchList.find(x=>x.code===CODE)||{}).name || (p[1]||CODE);
+    document.title=curName+' '+CODE.toUpperCase()+' · TradingAgents 做T盯盘';
     document.getElementById('mName').innerHTML=curName+'<span>'+CODE.toUpperCase()+'</span>';
     const mp=document.getElementById('mPrice'); mp.textContent=fmt(price); mp.className='m-price '+cls;
     const mc=document.getElementById('mChg'); mc.textContent=(chg>0?'+':'')+chg.toFixed(2)+'%'; mc.className='m-chg '+cls;
