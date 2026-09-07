@@ -193,8 +193,8 @@
       <div class="pool-sort">
         <span>排序:</span>
         <button class="ps-btn active" data-sort="cat">分类</button>
-        <button class="ps-btn" data-sort="amp">振幅↓</button>
-        <button class="ps-btn" data-sort="rsi">RSI6↓</button>
+        <button class="ps-btn" data-sort="amp">振幅<span class="ps-arrow">↓</span></button>
+        <button class="ps-btn" data-sort="rsi">RSI6<span class="ps-arrow">↓</span></button>
       </div>
       <div id="poolList"></div>
     </div>
@@ -477,6 +477,7 @@ const STOCK_POOL = [
 ];
 let poolQuotes = {};  // code -> {price, chg, amp, rsi6}
 let poolSort = 'cat';  // cat | amp | rsi
+let poolDir = -1;      // 排序方向: -1降序(↓) | 1升序(↑), 仅对amp/rsi生效
 
 function makePoolItem(s){
   const div=document.createElement('div');
@@ -505,15 +506,19 @@ function renderPool(){
       group.items.forEach(s=>box.appendChild(makePoolItem(s)));
     });
   } else {
-    // 打平后按振幅/RSI6降序
+    // 打平后按振幅/RSI6 升/降序(缺失值始终排最后)
     const all=STOCK_POOL.flatMap(g=>g.items);
     const key = poolSort==='amp'?'amp':'rsi6';
     all.sort((a,b)=>{
       const va=(poolQuotes[a.code]||{})[key], vb=(poolQuotes[b.code]||{})[key];
-      return (vb==null?-1:vb)-(va==null?-1:va);
+      if(va==null && vb==null) return 0;
+      if(va==null) return 1;   // a缺失, 排后
+      if(vb==null) return -1;  // b缺失, 排后
+      return (va-vb)*poolDir;  // poolDir=-1降序(vb-va), 1升序(va-vb)
     });
+    const arrow = poolDir<0?'↓':'↑';
     const cat=document.createElement('div'); cat.className='pool-cat';
-    cat.textContent = poolSort==='amp'?'按今日振幅 ↓':'按 RSI6 ↓';
+    cat.textContent = (poolSort==='amp'?'按今日振幅 ':'按 RSI6 ')+arrow;
     box.appendChild(cat);
     all.forEach(s=>box.appendChild(makePoolItem(s)));
   }
@@ -910,10 +915,19 @@ document.getElementById('btnAdd').onclick=addStock;
 document.getElementById('addInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addStock(); });
 // Tab切换
 document.querySelectorAll('.sb-tab').forEach(b=>b.addEventListener('click', ()=>switchTab(b.dataset.tab)));
-// 股票池排序
+// 股票池排序(再次点击同一排序键切换升/降序)
 document.querySelectorAll('.ps-btn').forEach(b=>b.addEventListener('click', ()=>{
-  poolSort=b.dataset.sort;
+  const sort=b.dataset.sort;
+  if(sort==='cat'){ poolSort='cat'; }
+  else if(poolSort===sort){ poolDir=-poolDir; }  // 同键再点: 翻转方向
+  else{ poolSort=sort; poolDir=-1; }             // 换键: 默认降序
   document.querySelectorAll('.ps-btn').forEach(x=>x.classList.toggle('active', x===b));
+  // 更新箭头(仅当前激活的amp/rsi显示方向)
+  const arrow=poolDir<0?'↓':'↑';
+  document.querySelectorAll('.ps-btn').forEach(x=>{
+    const a=x.querySelector('.ps-arrow'); if(!a) return;
+    a.textContent = (x.dataset.sort===poolSort)?arrow:'↓';
+  });
   renderPool();
 }));
 
