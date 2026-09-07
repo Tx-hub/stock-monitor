@@ -67,6 +67,22 @@
   .sig-wait { background:#fff8e8; border:1px solid #f5e0a8; color:#c08a1e; }
   .levels { display:flex; gap:8px; flex-wrap:wrap; font-size:13px; }
   .levels div { background:#f5f7fa; border:1px solid #e3e8ef; border-radius:6px; padding:6px 10px; }
+  /* ===== 深度分析面板 ===== */
+  #btnAnalyze { background:#3b82c4; color:#fff; border-color:#3b82c4; font-weight:600; }
+  #btnAnalyze:disabled { opacity:.55; cursor:not-allowed; }
+  .ana-hint { font-size:13px; color:#8a94a6; line-height:1.6; padding:4px 0; }
+  .ana-disc { font-size:11px; color:#b0b8c4; line-height:1.5; margin-top:10px; border-top:1px dashed #e3e8ef; padding-top:8px; }
+  .ana-agent { border:1px solid #e3e8ef; border-radius:8px; margin-top:10px; overflow:hidden; }
+  .ana-agent .ana-role { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:#1a2733; background:#f5f7fa; padding:8px 10px; border-bottom:1px solid #eef1f5; }
+  .ana-agent .ana-role .ana-badge { font-size:11px; font-weight:400; color:#fff; background:#8a94a6; border-radius:4px; padding:1px 6px; }
+  .ana-agent.role-bull .ana-role .ana-badge { background:#e0475b; }
+  .ana-agent.role-bear .ana-role .ana-badge { background:#1aae6f; }
+  .ana-agent.role-trader .ana-role .ana-badge { background:#3b82c4; }
+  .ana-agent.role-risk .ana-role .ana-badge { background:#c08a1e; }
+  .ana-agent .ana-text { padding:10px; font-size:13.5px; line-height:1.7; color:#2c3e50; white-space:pre-wrap; word-break:break-word; }
+  .ana-agent.running .ana-text::after { content:'▋'; color:#3b82c4; animation:anaBlink 1s step-end infinite; }
+  @keyframes anaBlink { 50%{ opacity:0; } }
+  .ana-agent .ana-text:empty::before { content:'思考中…'; color:#b0b8c4; }
   .book { display:grid; grid-template-columns:1fr 1fr; gap:16px; font-size:13px; }
   .book .row { display:flex; justify-content:space-between; padding:2px 0; }
   table { width:100%; font-size:12px; border-collapse:collapse; }
@@ -150,6 +166,9 @@
     body[data-view="more"] .m-hero { display:none; }
     body[data-view="more"] #signalPanel, body[data-view="more"] #chartPanel,
     body[data-view="more"] #bookPanel, body[data-view="more"] #stratPanel { display:none; }
+    body[data-view="more"] #analysisPanel { display:block; }  /* 深度分析仅在更多视图显示 */
+    body[data-view="board"] #analysisPanel, body[data-view="watch"] #analysisPanel,
+    body[data-view="pool"] #analysisPanel { display:none; }
     body[data-view="more"] .ctrl { display:flex; flex-wrap:wrap; gap:8px; padding:14px; }
     body[data-view="more"] .sub { display:block; padding:0 14px; }
     body[data-view="more"] #metricGrid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; padding:14px; }
@@ -207,6 +226,7 @@
   <div class="ctrl" id="ctrlBar">
     <button id="btnRefresh">立即刷新</button>
     <button id="btnAuto" class="on">自动刷新: 开(每5秒)</button>
+    <button id="btnAnalyze">🧠 TradingAgents 深度分析</button>
     <span class="tip">数据源腾讯行情·完整分时·仅供参考不构成投资建议</span>
   </div>
 
@@ -233,6 +253,13 @@
     <h2>TradingAgents · 做T策略信号</h2>
     <div class="signal" id="signal">等待数据…</div>
     <div class="levels" id="levels"></div>
+  </div>
+
+  <div class="panel" id="analysisPanel">
+    <h2>🧠 TradingAgents 多智能体深度分析</h2>
+    <div class="ana-hint" id="anaHint">点击上方「深度分析」，5位AI分析师（技术面·多头·空头·交易员·风控）将依次给出研判。</div>
+    <div id="anaBody"></div>
+    <div class="ana-disc">⚠️ 以上为AI生成的多智能体研判，仅供参考，不构成投资建议。市场有风险，决策需谨慎。</div>
   </div>
 
   <div class="panel" id="chartPanel" style="position:relative">
@@ -283,6 +310,8 @@ let timer = null, auto = true, lastPrice = null;
 let chartState = null;  // 存储最近一次绘图数据供tooltip使用
 let swipeList = null;   // 当前左右滑动所属列表(自选 or 股票池打平), null时回退watchList
 let lastTicks = null;   // 上一次成功获取的分时数据(接口抖动/休市时保留, 不清空图)
+let lastP = null;       // 上一次成功的行情原始字段数组(供深度分析读盘口/量比/换手)
+let analyzing = false;  // 深度分析进行中锁, 防重复触发
 
 // ===== 自选股列表管理 =====
 const DEFAULT_LIST = [
@@ -843,6 +872,7 @@ async function update(){
     const raw = await loadQuote();
     if(!raw){ document.getElementById('updtime').textContent='行情获取失败(可能休市或网络限制)'; return; }
     const p = raw.split('~');
+    lastP = p;  // 供深度分析读取盘口/量比/换手
     const price=parseFloat(p[3]), pc=parseFloat(p[4]), chg=parseFloat(p[32]);
     const hi=parseFloat(p[33]), lo=parseFloat(p[34]), avg=parseFloat(p[51]);
     const t=p[30];
@@ -912,6 +942,131 @@ document.getElementById('btnAuto').onclick=function(){
   auto=!auto; this.textContent='自动刷新: '+(auto?'开(每5秒)':'关'); this.className=auto?'on':'';
   if(auto){ timer=setInterval(update,5000); } else { clearInterval(timer); }
 };
+
+// ===== TradingAgents 多智能体深度分析 =====
+// ⚠️ 安全提醒: 本Key硬编码在公开仓库, 会明文暴露、可能被盗刷。请为该Key设用量上限, 必要时轮换。
+const ARK_URL = 'https://soleapi.com/v1/responses';
+const ARK_KEY = 'sk-sole-KqSbv5iYJfD3Xy7jNGfoX3Bw5GUuvo5WB3zWSDzAurw';
+const ARK_MODEL = 'qwen3.8-max';
+
+// 流式调用SoleAPI(Responses SSE), 每收到正文delta回调onDelta
+async function callArkStream(instructions, input, onDelta){
+  const resp = await fetch(ARK_URL, {
+    method:'POST',
+    headers:{ 'Authorization':'Bearer '+ARK_KEY, 'Content-Type':'application/json' },
+    body: JSON.stringify({ model:ARK_MODEL, instructions, input, stream:true, max_output_tokens:1200 })
+  });
+  if(!resp.ok){ throw new Error('HTTP '+resp.status+' '+(await resp.text()).slice(0,120)); }
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf='', full='';
+  while(true){
+    const {done, value} = await reader.read();
+    if(done) break;
+    buf += decoder.decode(value, {stream:true});
+    const parts = buf.split('\n\n');       // SSE以空行分隔事件
+    buf = parts.pop();                      // 末尾可能不完整, 留到下一轮
+    for(const block of parts){
+      const line = block.split('\n').find(l=>l.startsWith('data:'));
+      if(!line) continue;
+      const jsonStr = line.slice(5).trim();
+      if(!jsonStr || jsonStr==='[DONE]') continue;
+      let d; try{ d=JSON.parse(jsonStr); }catch(e){ continue; }
+      if(d.type==='response.output_text.delta' && d.delta){ full+=d.delta; onDelta(d.delta); }
+    }
+  }
+  return full;
+}
+
+// 采样分时序列(约20点), 控制token
+function sampleTicks(ticks, n){
+  if(!ticks || !ticks.length) return '';
+  const arr=ticks.filter(t=>!isNaN(t.price));
+  if(arr.length<=n) return arr.map(t=>t.t+' '+t.price.toFixed(2)).join('; ');
+  const step=(arr.length-1)/(n-1); const out=[];
+  for(let i=0;i<n;i++){ const t=arr[Math.round(i*step)]; out.push(t.t+' '+t.price.toFixed(2)); }
+  return out.join('; ');
+}
+
+// 组装当前股票盘面技术面数据(纯中文文本)
+function collectMarketData(){
+  const p=lastP, cs=chartState;
+  if(!p || !cs) return null;
+  const price=parseFloat(p[3]), pc=parseFloat(p[4]), chg=parseFloat(p[32]);
+  const hi=parseFloat(p[33]), lo=parseFloat(p[34]), avg=parseFloat(p[51]);
+  const name=(watchList.find(x=>x.code===CODE)||{}).name || p[1] || CODE;
+  const rsi6=cs.rsi6? [...cs.rsi6].reverse().find(v=>v!=null):null;
+  const ma5=cs.ma5? [...cs.ma5].reverse().find(v=>v!=null):null;
+  const ma10=cs.ma10? [...cs.ma10].reverse().find(v=>v!=null):null;
+  const sg=strategy(price,avg,hi,lo,chg);
+  const sgTxt=sg.txt.replace(/<[^>]+>/g,'');
+  let book='买盘: ';
+  for(let i=1;i<=5;i++){ book+='买'+i+' '+p[9+(i-1)*2]+'×'+p[10+(i-1)*2]+'  '; }
+  book+='\n卖盘: ';
+  for(let i=1;i<=5;i++){ book+='卖'+i+' '+p[19+(i-1)*2]+'×'+p[20+(i-1)*2]+'  '; }
+  return `【标的】${name}（${CODE.toUpperCase()}）
+【现价】${fmt(price)}　【昨收】${fmt(pc)}　【涨跌幅】${chg>0?'+':''}${chg.toFixed(2)}%
+【今高】${fmt(hi)}　【今低】${fmt(lo)}　【均价(VWAP)】${fmt(avg)}　【现价vs均价】${(price-avg>=0?'+':'')+fmt(price-avg)}
+【量比】${p[49]||'—'}　【换手率】${(p[38]||'—')}%
+【RSI6】${rsi6!=null?rsi6.toFixed(1):'—'}　【MA5】${ma5!=null?ma5.toFixed(2):'—'}　【MA10】${ma10!=null?ma10.toFixed(2):'—'}
+【五档盘口】\n${book}
+【今日分时走势采样】${sampleTicks(cs.ticks,20)}
+【规则引擎信号】${sgTxt}`;
+}
+
+// 5个Agent角色定义(系统提示)
+const ANA_AGENTS = [
+  { key:'tech', role:'📊 技术分析师', badge:'技术面', cls:'',
+    sys:'你是资深A股技术分析师。仅基于给定的盘面技术数据(量价、均价VWAP、RSI6、MA5/MA10、五档盘口、分时走势)做客观解读, 判断当前多空力量、支撑压力、量能情况。语言简洁专业, 200字内, 不要免责声明。' },
+  { key:'bull', role:'🐂 多头研究员', badge:'看多', cls:'role-bull',
+    sys:'你是偏多头的研究员。基于技术分析师的结论和盘面数据, 找出支持做多/正T(先低吸后高抛)的理由与有利信号。给出你认为的低吸区间。150字内, 观点鲜明, 不要免责声明。' },
+  { key:'bear', role:'🐻 空头研究员', badge:'看空', cls:'role-bear',
+    sys:'你是偏空头的研究员。基于技术分析师的结论和盘面数据, 找出风险点与支持做空/倒T(先高抛后低吸)的理由。指出需警惕的破位位置。150字内, 观点鲜明, 不要免责声明。' },
+  { key:'trader', role:'💼 交易员', badge:'决策', cls:'role-trader',
+    sys:'你是做T交易员。综合多空双方观点与盘面数据, 给出明确的日内做T方向(正T/倒T/观望)和具体可执行点位: 低吸价、减仓/高抛价、止损价。用要点列出, 150字内, 不要免责声明。' },
+  { key:'risk', role:'🛡️ 风控', badge:'风控', cls:'role-risk',
+    sys:'你是风控。审查交易员方案的风险, 给出最终"可执行做T建议", 标注风险等级(低/中/高)和最大建议仓位比例。150字内。结尾用一句话提示"仅供参考,不构成投资建议"。' }
+];
+
+function anaMakeBlock(a){
+  const div=document.createElement('div');
+  div.className='ana-agent '+a.cls;
+  div.innerHTML='<div class="ana-role">'+a.role+'<span class="ana-badge">'+a.badge+'</span></div><div class="ana-text" id="ana-'+a.key+'"></div>';
+  return div;
+}
+
+async function runDeepAnalysis(){
+  if(analyzing) return;
+  const btn=document.getElementById('btnAnalyze');
+  const md=collectMarketData();
+  if(!md){ document.getElementById('anaHint').textContent='⏳ 行情/分时尚未加载完成, 请稍候再试(切到盯盘视图等数据出来)。'; return; }
+  analyzing=true; btn.disabled=true; btn.textContent='🧠 分析中…';
+  document.getElementById('anaHint').style.display='none';
+  const body=document.getElementById('anaBody'); body.innerHTML='';
+  let context='以下是该标的的实时盘面技术数据:\n'+md+'\n\n';
+  try{
+    for(const a of ANA_AGENTS){
+      const block=anaMakeBlock(a); body.appendChild(block);
+      block.classList.add('running');
+      const txtEl=document.getElementById('ana-'+a.key);
+      const input = context + (a.key==='tech'? '请开始你的技术面分析。' : '请基于以上信息与前面各方观点, 给出你的意见。');
+      let out='';
+      out = await callArkStream(a.sys, input, (delta)=>{
+        txtEl.textContent+=delta;
+        txtEl.scrollIntoView({block:'nearest'});
+      });
+      block.classList.remove('running');
+      context += a.role+'的结论: '+out+'\n\n';
+    }
+  }catch(e){
+    const err=document.createElement('div'); err.className='ana-hint'; err.style.color='#d63a4d';
+    err.textContent='❌ 分析出错: '+e.message; body.appendChild(err);
+  }finally{
+    analyzing=false; btn.disabled=false; btn.textContent='🧠 TradingAgents 深度分析';
+  }
+}
+document.getElementById('btnAnalyze').onclick=runDeepAnalysis;
+
 // 添加自选股
 document.getElementById('btnAdd').onclick=addStock;
 document.getElementById('addInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addStock(); });
