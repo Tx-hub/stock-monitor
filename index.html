@@ -282,6 +282,7 @@ let CODE = 'sz002384';
 let timer = null, auto = true, lastPrice = null;
 let chartState = null;  // 存储最近一次绘图数据供tooltip使用
 let swipeList = null;   // 当前左右滑动所属列表(自选 or 股票池打平), null时回退watchList
+let lastTicks = null;   // 上一次成功获取的分时数据(接口抖动/休市时保留, 不清空图)
 
 // ===== 自选股列表管理 =====
 const DEFAULT_LIST = [
@@ -380,7 +381,7 @@ function updateListPrices(){
 function switchStock(code){
   if(code===CODE) return;
   CODE=code;
-  lastPrice=null; chartState=null;
+  lastPrice=null; chartState=null; lastTicks=null;
   let s=watchList.find(x=>x.code===code);
   if(s){ swipeList=watchList; }  // 来自自选: 滑动在自选列表内切
   else{ for(const g of STOCK_POOL){ const f=g.items.find(x=>x.code===code); if(f){ s=f; swipeList=STOCK_POOL.flatMap(g=>g.items); break; } } }
@@ -891,7 +892,8 @@ async function update(){
 
     // 分时图: 拉取整日完整分时
     const ticks=await loadMinute();
-    if(ticks && ticks.length){ drawChart(ticks, pc); }
+    if(ticks && ticks.length){ lastTicks=ticks; drawChart(ticks, pc); }
+    else if(lastTicks && lastTicks.length){ drawChart(lastTicks, pc); }  // 接口抖动/休市: 保留上次分时, 不清空
     else { drawChart([], pc); }
     // 回填当前股RSI6到左侧列表(即时更新, 不等列表轮询)
     if(chartState && chartState.rsi6){
