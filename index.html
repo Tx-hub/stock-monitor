@@ -945,16 +945,16 @@ document.getElementById('btnAuto').onclick=function(){
 
 // ===== TradingAgents 多智能体深度分析 =====
 // ⚠️ 安全提醒: 本Key硬编码在公开仓库, 会明文暴露、可能被盗刷。请为该Key设用量上限, 必要时轮换。
-const ARK_URL = 'https://soleapi.com/v1/responses';
-const ARK_KEY = 'sk-sole-KqSbv5iYJfD3Xy7jNGfoX3Bw5GUuvo5WB3zWSDzAurw';
-const ARK_MODEL = 'qwen3.8-max';
+const ARK_URL = 'https://www.mofas.one/v1/chat/completions';
+const ARK_KEY = 'sk-4PK0sGsMmcaxFEQBVJ8LxOCeMsCJGrRFgwKbZLZ9fuMOe9vq';
+const ARK_MODEL = 'grok-4.5';
 
-// 流式调用SoleAPI(Responses SSE), 每收到正文delta回调onDelta
+// 流式调用(OpenAI chat.completions SSE), 每收到正文delta回调onDelta
 async function callArkStream(instructions, input, onDelta){
   const resp = await fetch(ARK_URL, {
     method:'POST',
     headers:{ 'Authorization':'Bearer '+ARK_KEY, 'Content-Type':'application/json' },
-    body: JSON.stringify({ model:ARK_MODEL, instructions, input, stream:true, max_output_tokens:1200 })
+    body: JSON.stringify({ model:ARK_MODEL, messages:[{role:'system',content:instructions},{role:'user',content:input}], stream:true, max_tokens:1200 })
   });
   if(!resp.ok){ throw new Error('HTTP '+resp.status+' '+(await resp.text()).slice(0,120)); }
   const reader = resp.body.getReader();
@@ -972,7 +972,8 @@ async function callArkStream(instructions, input, onDelta){
       const jsonStr = line.slice(5).trim();
       if(!jsonStr || jsonStr==='[DONE]') continue;
       let d; try{ d=JSON.parse(jsonStr); }catch(e){ continue; }
-      if(d.type==='response.output_text.delta' && d.delta){ full+=d.delta; onDelta(d.delta); }
+      const delta = d.choices && d.choices[0] && d.choices[0].delta && d.choices[0].delta.content;
+      if(delta){ full+=delta; onDelta(delta); }
     }
   }
   return full;
