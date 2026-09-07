@@ -77,35 +77,83 @@
   button.on { background:#3b82c4; border-color:#3b82c4; color:#fff; }
   .tip { font-size:11px; color:#8a94a6; margin-top:4px; }
   .flash { animation:fl .6s; } @keyframes fl { from{background:#fff3cd;} to{background:transparent;} }
-  /* 平板/手机: 侧边栏改为顶部横向滚动 */
+  /* 折叠面板(默认桌面: 全部展开, 不显示箭头) */
+  .collap-head { cursor:default; }
+  .collap-arrow { display:none; }
+  /* 移动专用元素默认隐藏(桌面端) */
+  .m-hero, .m-tabbar { display:none; }
+  /* ============ 手机端 (≤768px): 决策驾驶舱 ============ */
   @media (max-width:768px){
-    .layout { flex-direction:column; }
-    .sidebar { width:100%; position:static; }
-    #stockList { display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; }
-    .stock-item { flex:0 0 auto; min-width:130px; margin-bottom:0; }
-    #poolList { max-height:260px; overflow-y:auto; }
-  }
-  /* 手机端适配 */
-  @media (max-width:600px){
-    body { padding:8px; }
-    h1 { font-size:16px; }
-    .grid { grid-template-columns:repeat(2,1fr); gap:6px; }
-    .card { padding:8px; border-radius:8px; }
-    .card .val { font-size:17px; }
-    .card .label { font-size:10px; }
-    .panel { padding:10px; }
-    #chart { height:180px; }
-    .signal { font-size:14px; padding:10px; }
-    .levels { font-size:12px; }
-    .book { grid-template-columns:1fr 1fr; gap:8px; font-size:12px; }
-    .ctrl { gap:6px; }
-    button { flex:1; min-width:110px; padding:8px; font-size:13px; }
-    .ctrl .tip { flex-basis:100%; }
-    table { font-size:11px; }
+    body { padding:0 0 64px 0; background:#f5f7fa; }
+    .layout { flex-direction:column; gap:0; max-width:100%; }
+    /* 侧边栏(自选/股票池)默认隐藏, 由视图切换控制 */
+    .sidebar { width:100%; position:static; border-radius:0; border:none; box-shadow:none; padding:10px 10px 4px; display:none; }
+    .sb-tabs { display:none; }  /* 顶部tab隐藏, 用底部导航 */
+    #stockList .stock-item { min-width:0; margin-bottom:4px; }
+    #poolList { max-height:none; }
+    .wrap { padding:0; }
+    h1 { display:none; }        /* 标题移到hero */
+    .sub { display:none; }      /* 更新时间移到更多 */
+    .ctrl { display:none; }     /* 控制栏移到更多 */
+    #metricGrid { display:none;}/* 6宫格指标隐藏, 用hero+折叠 */
+
+    /* 决策卡 hero */
+    .m-hero { display:block; background:#fff; padding:14px 14px 12px; border-bottom:1px solid #eef1f5; position:sticky; top:0; z-index:20; }
+    .m-hero-top { display:flex; align-items:baseline; gap:10px; }
+    .m-price { font-size:34px; font-weight:700; line-height:1; }
+    .m-chg { font-size:18px; font-weight:600; }
+    .m-levels { display:flex; gap:6px; margin-top:10px; }
+    .m-levels div { flex:1; text-align:center; background:#f5f7fa; border-radius:7px; padding:6px 2px; font-size:11px; color:#8a94a6; }
+    .m-levels div b { display:block; font-size:14px; margin-top:2px; color:#1a2733; }
+
+    .panel { border-radius:0; border-left:none; border-right:none; margin-bottom:8px; padding:12px 14px; }
+    #signalPanel h2 { display:none; }
+    .signal { font-size:15px; padding:12px; }
+    #chartPanel h2 { font-size:11px; color:#8a94a6; }
+    #chart { height:300px; }     /* 图表放大 */
+    #rsiChart { height:110px; }
+
+    /* 折叠面板启用 */
+    .collapsible .collap-head { cursor:pointer; display:flex; justify-content:space-between; align-items:center; margin-bottom:0; }
+    .collapsible .collap-arrow { display:inline; transition:transform .2s; color:#8a94a6; }
+    .collapsible.collapsed .collap-body { display:none; }
+    .collapsible.collapsed .collap-arrow { transform:rotate(-90deg); }
+
+    /* 视图切换: body[data-view] 控制显隐 */
+    body[data-view="board"] .sidebar { display:none; }
+    body[data-view="board"] .wrap { display:block; }
+    body[data-view="watch"] #tabWatch { display:block; }
+    body[data-view="watch"] #tabPool { display:none; }
+    body[data-view="watch"] .sidebar { display:block; }
+    body[data-view="watch"] .wrap { display:none; }
+    body[data-view="pool"] #tabPool { display:block; }
+    body[data-view="pool"] #tabWatch { display:none; }
+    body[data-view="pool"] .sidebar { display:block; }
+    body[data-view="pool"] .wrap { display:none; }
+    body[data-view="more"] .wrap { display:block; }
+    body[data-view="more"] .sidebar { display:none; }
+    body[data-view="more"] .m-hero { display:none; }
+    body[data-view="more"] #signalPanel, body[data-view="more"] #chartPanel,
+    body[data-view="more"] #bookPanel, body[data-view="more"] #stratPanel { display:none; }
+    body[data-view="more"] .ctrl { display:flex; flex-wrap:wrap; gap:8px; padding:14px; }
+    body[data-view="more"] .sub { display:block; padding:0 14px; }
+    body[data-view="more"] #metricGrid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; padding:14px; }
+    body[data-view="more"] .card .val { font-size:16px; }
+    body[data-view="more"] .card .label { font-size:10px; }
+    /* 非board视图隐藏盯盘专属 */
+    body[data-view="watch"] .m-hero, body[data-view="pool"] .m-hero { display:none; }
+
+    /* 底部导航 */
+    .m-tabbar { display:flex; position:fixed; bottom:0; left:0; right:0; height:56px; background:#fff; border-top:1px solid #e3e8ef; z-index:50; box-shadow:0 -2px 8px rgba(60,80,120,.06); }
+    .m-tab { flex:1; border:none; background:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:11px; color:#8a94a6; padding:0; }
+    .m-tab .mt-ico { font-size:19px; }
+    .m-tab.active { color:#3b82c4; font-weight:600; }
+    /* 滑动切换提示 */
+    .swipe-hint { position:fixed; top:50%; transform:translateY(-50%); background:rgba(59,130,196,.9); color:#fff; padding:8px 14px; border-radius:20px; font-size:13px; z-index:60; opacity:0; transition:opacity .2s; pointer-events:none; }
+    .swipe-hint.show { opacity:1; }
   }
   @media (max-width:360px){
-    .grid { grid-template-columns:1fr 1fr; }
-    .card .val { font-size:15px; }
+    .m-price { font-size:28px; }
   }
 </style>
 </head>
@@ -141,13 +189,13 @@
   <h1 id="mainTitle">— · TradingAgents 做T盯盘</h1>
   <div class="sub" id="updtime">加载中…</div>
 
-  <div class="ctrl">
+  <div class="ctrl" id="ctrlBar">
     <button id="btnRefresh">立即刷新</button>
     <button id="btnAuto" class="on">自动刷新: 开(每5秒)</button>
     <span class="tip">数据源腾讯行情·完整分时·仅供参考不构成投资建议</span>
   </div>
 
-  <div class="grid">
+  <div class="grid" id="metricGrid">
     <div class="card"><div class="label">现价</div><div class="val" id="price">—</div></div>
     <div class="card"><div class="label">涨跌幅</div><div class="val" id="chg">—</div></div>
     <div class="card"><div class="label">均价线</div><div class="val" id="avg">—</div></div>
@@ -156,13 +204,22 @@
     <div class="card"><div class="label">量比 / 换手</div><div class="val" id="vol" style="font-size:15px">—</div></div>
   </div>
 
-  <div class="panel">
+  <!-- 手机端专用: 决策卡头部(桌面隐藏) -->
+  <div class="m-hero" id="mHero">
+    <div class="m-hero-top">
+      <div class="m-price" id="mPrice">—</div>
+      <div class="m-chg" id="mChg">—</div>
+    </div>
+    <div class="m-levels" id="mLevels"></div>
+  </div>
+
+  <div class="panel" id="signalPanel">
     <h2>TradingAgents · 做T策略信号</h2>
     <div class="signal" id="signal">等待数据…</div>
     <div class="levels" id="levels"></div>
   </div>
 
-  <div class="panel" style="position:relative">
+  <div class="panel" id="chartPanel" style="position:relative">
     <h2>今日分时图（红=分时价 · 黄=均价线 · 蓝=MA5 · 紫=MA10 · 灰虚线=昨收）</h2>
     <canvas id="chart"></canvas>
     <h2 style="margin-top:10px">RSI6（SMA递归平滑法 / 威尔德平滑）</h2>
@@ -170,25 +227,39 @@
     <div id="tooltip"></div>
   </div>
 
-  <div class="panel">
-    <h2>五档盘口</h2>
+  <div class="panel collapsible" id="bookPanel">
+    <h2 class="collap-head">五档盘口 <span class="collap-arrow">▾</span></h2>
+    <div class="collap-body">
     <div class="book">
       <div><div style="color:#3fb950;margin-bottom:4px">卖盘</div><div id="asks"></div></div>
       <div><div style="color:#f85149;margin-bottom:4px">买盘</div><div id="bids"></div></div>
     </div>
+    </div>
   </div>
 
-  <div class="panel">
-    <h2>策略说明</h2>
+  <div class="panel collapsible collapsed" id="stratPanel">
+    <h2 class="collap-head">策略说明 <span class="collap-arrow">▾</span></h2>
+    <div class="collap-body">
     <table>
       <tr><td>压力位</td><td id="lvR">今日最高</td><td>冲高不过→<b style="color:#f85149">倒T减仓(先卖)</b></td></tr>
       <tr><td>生命线</td><td id="lvA">均价线</td><td>站上偏强持有 / 跌破→减T信号</td></tr>
       <tr><td>支撑位</td><td id="lvS">今日最低</td><td>跌破→反弹转弱，当日停止做T</td></tr>
     </table>
     <div class="tip">正T=先低吸后高抛(空仓/加仓思路)；倒T=先高抛后低吸(持有底仓日内滚差价)。破位止损，只用小仓位。</div>
+    </div>
   </div>
   </div><!-- /.wrap -->
 </div><!-- /.layout -->
+
+<!-- 手机端底部导航(桌面隐藏) -->
+<nav class="m-tabbar" id="mTabbar">
+  <button class="m-tab active" data-view="board"><span class="mt-ico">📈</span><span>盯盘</span></button>
+  <button class="m-tab" data-view="watch"><span class="mt-ico">⭐</span><span>自选</span></button>
+  <button class="m-tab" data-view="pool"><span class="mt-ico">🎯</span><span>股票池</span></button>
+  <button class="m-tab" data-view="more"><span class="mt-ico">⚙️</span><span>更多</span></button>
+</nav>
+<div class="swipe-hint" id="swipeHint"></div>
+
 
 <script>
 let CODE = 'sz002384';
@@ -297,7 +368,12 @@ function switchStock(code){
   if(!s){ for(const g of STOCK_POOL){ const f=g.items.find(x=>x.code===code); if(f){ s=f; break; } } }
   document.getElementById('mainTitle').textContent=(s?s.name:code)+' · TradingAgents 做T盯盘';
   updateListPrices();
-  if(document.getElementById('tabPool').style.display!=='none') updatePoolPrices();
+  const poolVisible = document.getElementById('tabPool').offsetParent!==null;
+  if(poolVisible) updatePoolPrices();
+  // 手机端: 从自选/股票池选股后自动跳回盯盘视图
+  if(window.innerWidth<=768 && typeof setView==='function' && document.body.dataset.view!=='board'){
+    setView('board');
+  }
   update();
 }
 
@@ -451,7 +527,7 @@ function updatePoolPrices(){
 }
 
 async function refreshPool(){
-  if(document.getElementById('tabPool').style.display==='none') return;  // 未打开池子不刷新
+  if(document.getElementById('tabPool').offsetParent===null) return;  // 未显示则不刷新(兼容桌面inline与手机CSS)
   const all=STOCK_POOL.flatMap(g=>g.items);
   for(const s of all){
     const raw=await fetchQuote(s.code);
@@ -768,6 +844,15 @@ async function update(){
     document.getElementById('lvA').textContent=fmt(avg);
     document.getElementById('lvS').textContent=fmt(lo);
 
+    // 手机端决策卡 hero
+    const mp=document.getElementById('mPrice'); mp.textContent=fmt(price); mp.className='m-price '+cls;
+    const mc=document.getElementById('mChg'); mc.textContent=(chg>0?'+':'')+chg.toFixed(2)+'%'; mc.className='m-chg '+cls;
+    document.getElementById('mLevels').innerHTML=
+      '<div>压力<b class="up">'+fmt(hi)+'</b></div>'+
+      '<div>均价<b>'+fmt(avg)+'</b></div>'+
+      '<div>支撑<b class="down">'+fmt(lo)+'</b></div>'+
+      '<div>现价<b class="'+cls+'">'+fmt(price)+'</b></div>';
+
     // 盘口
     let asks='',bids='';
     for(let i=5;i>=1;i--){ asks+='<div class="row"><span class="down">卖'+i+' '+p[18+ (i-1)*2 +1 -0]+'</span></div>'; }
@@ -810,6 +895,54 @@ document.querySelectorAll('.ps-btn').forEach(b=>b.addEventListener('click', ()=>
   document.querySelectorAll('.ps-btn').forEach(x=>x.classList.toggle('active', x===b));
   renderPool();
 }));
+
+// ===== 手机端: 折叠面板 =====
+document.querySelectorAll('.collapsible .collap-head').forEach(h=>{
+  h.addEventListener('click', ()=>{
+    if(window.innerWidth>768) return;  // 仅手机端可折叠
+    h.parentElement.classList.toggle('collapsed');
+  });
+});
+
+// ===== 手机端: 底部导航视图切换 =====
+function setView(view){
+  document.body.dataset.view=view;
+  document.querySelectorAll('.m-tab').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
+  if(view==='pool'){ renderPool(); refreshPool(); }
+  if(view==='board'){ setTimeout(()=>{ if(chartState) drawChart(chartState.ticks, chartState.pc); }, 50); }
+}
+document.querySelectorAll('.m-tab').forEach(b=>b.addEventListener('click', ()=>setView(b.dataset.view)));
+
+// ===== 手机端: 左右滑动切换股票(仅盯盘视图) =====
+(function(){
+  let sx=0, sy=0, moved=false;
+  const hint=document.getElementById('swipeHint');
+  function curIndex(){ return watchList.findIndex(x=>x.code===CODE); }
+  function go(dir){  // dir=1下一只, -1上一只
+    const list=watchList; if(!list.length) return;
+    let i=curIndex(); if(i<0) i=0;
+    let ni=(i+dir+list.length)%list.length;
+    const s=list[ni];
+    hint.textContent=(dir>0?'▶ ':'◀ ')+s.name;
+    hint.style[dir>0?'right':'left']='20px'; hint.style[dir>0?'left':'right']='auto';
+    hint.classList.add('show'); setTimeout(()=>hint.classList.remove('show'),800);
+    switchStock(s.code);
+  }
+  document.addEventListener('touchstart', e=>{
+    if(window.innerWidth>768 || document.body.dataset.view!=='board') return;
+    sx=e.touches[0].clientX; sy=e.touches[0].clientY; moved=false;
+  }, {passive:true});
+  document.addEventListener('touchend', e=>{
+    if(window.innerWidth>768 || document.body.dataset.view!=='board') return;
+    const dx=e.changedTouches[0].clientX-sx, dy=e.changedTouches[0].clientY-sy;
+    // 图表区内滑动交给十字光标, 不切股票
+    if(e.target.id==='chart'||e.target.id==='rsiChart') return;
+    if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*1.5){ go(dx<0?1:-1); }
+  }, {passive:true});
+})();
+
+// 初始视图(手机端默认盯盘)
+if(window.innerWidth<=768){ document.body.dataset.view='board'; }
 
 // 初始化
 const initStock=watchList.find(x=>x.code===CODE)||watchList[0];
