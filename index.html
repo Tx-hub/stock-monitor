@@ -10,6 +10,26 @@
   .layout { max-width:1240px; margin:0 auto; display:flex; gap:12px; align-items:flex-start; }
   .sidebar { width:230px; flex-shrink:0; background:#fff; border:1px solid #e3e8ef; border-radius:10px; padding:10px; box-shadow:0 1px 3px rgba(60,80,120,.06); position:sticky; top:12px; }
   .sidebar .sb-title { font-size:13px; font-weight:600; color:#1a2733; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
+  .sb-tabs { display:flex; gap:6px; margin-bottom:10px; }
+  .sb-tab { flex:1; padding:7px 0; font-size:13px; font-weight:600; background:#f5f7fa; border:1px solid #e3e8ef; border-radius:7px; color:#8a94a6; cursor:pointer; }
+  .sb-tab.active { background:#3b82c4; border-color:#3b82c4; color:#fff; }
+  .pool-tip { font-size:11px; color:#8a94a6; margin-bottom:8px; line-height:1.5; }
+  .pool-tip b { color:#3b82c4; }
+  .pool-sort { display:flex; align-items:center; gap:4px; font-size:11px; color:#8a94a6; margin-bottom:8px; }
+  .ps-btn { padding:3px 8px; font-size:11px; background:#f5f7fa; border:1px solid #e3e8ef; border-radius:5px; color:#8a94a6; cursor:pointer; }
+  .ps-btn.active { background:#eaf2fb; border-color:#bcd7f2; color:#3b82c4; font-weight:600; }
+  .pool-cat { font-size:11px; font-weight:600; color:#3b82c4; margin:8px 0 4px; padding-left:2px; }
+  .pool-item { display:flex; justify-content:space-between; align-items:center; padding:7px 8px; border-radius:7px; cursor:pointer; margin-bottom:3px; border:1px solid transparent; }
+  .pool-item:hover { background:#f2f6fb; }
+  .pool-item.active { background:#eaf2fb; border-color:#bcd7f2; }
+  .pool-item .pi-name { font-size:12px; font-weight:600; color:#1a2733; }
+  .pool-item .pi-code { font-size:10px; color:#8a94a6; }
+  .pool-item .pi-right { text-align:right; margin-left:auto; margin-right:6px; }
+  .pool-item .pi-price { font-size:12px; font-weight:600; }
+  .pool-item .pi-sub { font-size:10px; }
+  .pool-item .pi-add { font-size:16px; color:#3b82c4; padding:0 3px; font-weight:700; }
+  .pool-item .pi-add:hover { color:#1a5a94; }
+  .pool-item .pi-add.added { color:#a3e4c4; }
   .sidebar .add-box { display:flex; gap:4px; margin-bottom:8px; }
   .sidebar .add-box input { flex:1; min-width:0; border:1px solid #d5dce6; border-radius:6px; padding:6px 8px; font-size:12px; color:#2c3e50; }
   .sidebar .add-box button { padding:6px 10px; font-size:12px; }
@@ -24,6 +44,7 @@
   .stock-item .si-right { text-align:right; }
   .stock-item .si-right .si-price { font-size:13px; font-weight:600; }
   .stock-item .si-right .si-chg { font-size:11px; }
+  .stock-item .si-right .si-rsi { font-size:10px; color:#8a94a6; margin-top:1px; }
   .stock-item .si-del { color:#c8d0da; font-size:14px; margin-left:6px; padding:0 2px; }
   .stock-item .si-del:hover { color:#e0475b; }
   .wrap { flex:1; min-width:0; }
@@ -62,6 +83,7 @@
     .sidebar { width:100%; position:static; }
     #stockList { display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; }
     .stock-item { flex:0 0 auto; min-width:130px; margin-bottom:0; }
+    #poolList { max-height:260px; overflow-y:auto; }
   }
   /* 手机端适配 */
   @media (max-width:600px){
@@ -90,21 +112,41 @@
 <body>
 <div class="layout">
   <div class="sidebar">
-    <div class="sb-title"><span>自选股</span><span style="font-size:10px;color:#8a94a6;font-weight:400">点击切换</span></div>
-    <div class="add-box">
-      <input id="addInput" placeholder="代码/名称 如 600519" />
-      <button id="btnAdd">添加</button>
+    <div class="sb-tabs">
+      <button class="sb-tab active" data-tab="watch">自选股</button>
+      <button class="sb-tab" data-tab="pool">股票池</button>
     </div>
-    <div id="stockList"></div>
+    <!-- 自选股面板 -->
+    <div id="tabWatch">
+      <div class="add-box">
+        <input id="addInput" placeholder="代码/名称 如 600519" />
+        <button id="btnAdd">添加</button>
+      </div>
+      <div id="stockList"></div>
+    </div>
+    <!-- 股票池面板 -->
+    <div id="tabPool" style="display:none">
+      <div class="pool-tip">适合做T的高波动 T+0 ETF · 点击查看 · <b>＋</b>加入自选</div>
+      <div class="pool-sort">
+        <span>排序:</span>
+        <button class="ps-btn active" data-sort="cat">分类</button>
+        <button class="ps-btn" data-sort="amp">振幅↓</button>
+        <button class="ps-btn" data-sort="rsi">RSI6↓</button>
+      </div>
+      <div id="poolList"></div>
+    </div>
   </div>
+
   <div class="wrap">
   <h1 id="mainTitle">— · TradingAgents 做T盯盘</h1>
   <div class="sub" id="updtime">加载中…</div>
+
   <div class="ctrl">
     <button id="btnRefresh">立即刷新</button>
     <button id="btnAuto" class="on">自动刷新: 开(每5秒)</button>
     <span class="tip">数据源腾讯行情·完整分时·仅供参考不构成投资建议</span>
   </div>
+
   <div class="grid">
     <div class="card"><div class="label">现价</div><div class="val" id="price">—</div></div>
     <div class="card"><div class="label">涨跌幅</div><div class="val" id="chg">—</div></div>
@@ -113,11 +155,13 @@
     <div class="card"><div class="label">今高 / 今低</div><div class="val" id="hl" style="font-size:15px">—</div></div>
     <div class="card"><div class="label">量比 / 换手</div><div class="val" id="vol" style="font-size:15px">—</div></div>
   </div>
+
   <div class="panel">
     <h2>TradingAgents · 做T策略信号</h2>
     <div class="signal" id="signal">等待数据…</div>
     <div class="levels" id="levels"></div>
   </div>
+
   <div class="panel" style="position:relative">
     <h2>今日分时图（红=分时价 · 黄=均价线 · 蓝=MA5 · 紫=MA10 · 灰虚线=昨收）</h2>
     <canvas id="chart"></canvas>
@@ -125,6 +169,7 @@
     <canvas id="rsiChart"></canvas>
     <div id="tooltip"></div>
   </div>
+
   <div class="panel">
     <h2>五档盘口</h2>
     <div class="book">
@@ -132,6 +177,7 @@
       <div><div style="color:#f85149;margin-bottom:4px">买盘</div><div id="bids"></div></div>
     </div>
   </div>
+
   <div class="panel">
     <h2>策略说明</h2>
     <table>
@@ -143,10 +189,12 @@
   </div>
   </div><!-- /.wrap -->
 </div><!-- /.layout -->
+
 <script>
 let CODE = 'sz002384';
 let timer = null, auto = true, lastPrice = null;
 let chartState = null;  // 存储最近一次绘图数据供tooltip使用
+
 // ===== 自选股列表管理 =====
 const DEFAULT_LIST = [
   {code:'sz002384', name:'东山精密'},
@@ -157,11 +205,13 @@ const DEFAULT_LIST = [
 ];
 let watchList = loadWatch();
 let listQuotes = {};  // code -> {price, chg}
+
 function loadWatch(){
   try{ const s=JSON.parse(localStorage.getItem('watchlist')); if(s&&s.length) return s; }catch(e){}
   return DEFAULT_LIST.slice();
 }
 function saveWatch(){ localStorage.setItem('watchlist', JSON.stringify(watchList)); }
+
 // 标准化输入为 sz/sh + 6位代码
 function normCode(input){
   input=input.trim();
@@ -174,7 +224,9 @@ function normCode(input){
   if(c[0]==='8'||c[0]==='4'||c.startsWith('92')) return 'bj'+c;
   return 'sz'+c;
 }
+
 let dragIndex=null;
+
 // 重建列表结构(增删/排序/切换时调用)
 function renderList(){
   const box=document.getElementById('stockList');
@@ -188,7 +240,7 @@ function renderList(){
     div.innerHTML=
       '<div class="si-left"><div class="si-name">'+s.name+'</div><div class="si-code">'+s.code.toUpperCase()+'</div></div>'+
       '<div class="si-mid">'+
-        '<div class="si-right"><div class="si-price">—</div><div class="si-chg">—</div></div>'+
+        '<div class="si-right"><div class="si-price">—</div><div class="si-chg">—</div><div class="si-rsi">RSI —</div></div>'+
         '<span class="si-del" title="删除">×</span>'+
       '</div>';
     // 整行点击切换(排除删除按钮)
@@ -214,6 +266,7 @@ function renderList(){
   });
   updateListPrices();
 }
+
 // 只更新价格(不重建DOM, 避免点击失效)
 function updateListPrices(){
   document.querySelectorAll('#stockList .stock-item').forEach(div=>{
@@ -225,18 +278,29 @@ function updateListPrices(){
     pe.textContent = q.price!=null?q.price.toFixed(2):'—';
     ce.textContent = chg!=null?((chg>0?'+':'')+chg.toFixed(2)+'%'):'—';
     pe.className='si-price '+cls; ce.className='si-chg '+cls;
+    // RSI6: >80超买(红) <20超卖(绿) 其余灰
+    const re=div.querySelector('.si-rsi');
+    if(re){
+      const rv=q.rsi6;
+      re.textContent = rv!=null?('RSI '+rv.toFixed(1)):'RSI —';
+      re.className='si-rsi '+(rv==null?'':(rv>=80?'up':(rv<=20?'down':'flat')));
+    }
     div.classList.toggle('active', code===CODE);
   });
 }
+
 function switchStock(code){
   if(code===CODE) return;
   CODE=code;
   lastPrice=null; chartState=null;
-  const s=watchList.find(x=>x.code===code);
+  let s=watchList.find(x=>x.code===code);
+  if(!s){ for(const g of STOCK_POOL){ const f=g.items.find(x=>x.code===code); if(f){ s=f; break; } } }
   document.getElementById('mainTitle').textContent=(s?s.name:code)+' · TradingAgents 做T盯盘';
   updateListPrices();
+  if(document.getElementById('tabPool').style.display!=='none') updatePoolPrices();
   update();
 }
+
 function removeStock(code){
   if(watchList.length<=1) return;
   watchList=watchList.filter(x=>x.code!==code);
@@ -244,6 +308,7 @@ function removeStock(code){
   if(code===CODE){ switchStock(watchList[0].code); }
   else renderList();
 }
+
 // 拉取某只股票的行情(用于列表), 通过script全局变量
 function fetchQuote(code){
   return new Promise((resolve)=>{
@@ -254,16 +319,172 @@ function fetchQuote(code){
     document.body.appendChild(s);
   });
 }
+
+// 按代码拉分时(用于列表算RSI6)
+async function loadMinuteByCode(code){
+  try{
+    const r=await fetch('https://web.ifzq.gtimg.cn/appstock/app/minute/query?code='+code+'&r='+Date.now(),{cache:'no-store'});
+    const d=await r.json();
+    const node=d.data && d.data[code] && d.data[code].data && d.data[code].data.data;
+    if(!node) return null;
+    return node.map(line=>parseFloat(line.split(' ')[1]));
+  }catch(e){ return null; }
+}
+
 async function refreshList(){
   for(const s of watchList){
     const raw=await fetchQuote(s.code);
-    if(raw){ const p=raw.split('~'); listQuotes[s.code]={price:parseFloat(p[3]), chg:parseFloat(p[32])};
+    if(raw){ const p=raw.split('~'); listQuotes[s.code]={...(listQuotes[s.code]||{}), price:parseFloat(p[3]), chg:parseFloat(p[32])};
       // 自动补全名称
       if((!s.name||s.name===s.code) && p[1]) s.name=p[1];
+    }
+    // 拉分时算RSI6
+    const prices=await loadMinuteByCode(s.code);
+    if(prices && prices.length>1){
+      const rr=calcRSI(prices,6);
+      const last=[...rr].reverse().find(v=>v!=null);
+      if(last!=null) listQuotes[s.code]={...(listQuotes[s.code]||{}), rsi6:last};
     }
   }
   updateListPrices();
 }
+
+// ===== 股票池: 适合做T的高波动 T+0 ETF (已剔除货币/债券/红利等低波动) =====
+const STOCK_POOL = [
+  { cat:'港股科技/互联', items:[
+    {code:'sh513180', name:'恒生科技指数ETF'},
+    {code:'sh513130', name:'恒生科技ETF'},
+    {code:'sh513050', name:'中概互联网ETF'},
+    {code:'sh513330', name:'恒生互联网ETF'},
+    {code:'sz159920', name:'恒生ETF'},
+  ]},
+  { cat:'港股医药', items:[
+    {code:'sh513060', name:'恒生医疗ETF'},
+    {code:'sz159892', name:'恒生医药ETF'},
+  ]},
+  { cat:'美股/欧洲', items:[
+    {code:'sh513100', name:'纳指ETF'},
+    {code:'sz159509', name:'纳指科技ETF'},
+    {code:'sh513500', name:'标普500ETF'},
+    {code:'sz159866', name:'日经225ETF'},
+    {code:'sh513080', name:'法国CAC40ETF'},
+    {code:'sh513030', name:'德国ETF'},
+  ]},
+  { cat:'商品/资源', items:[
+    {code:'sz159985', name:'豆粕ETF'},
+    {code:'sh501018', name:'南方原油'},
+    {code:'sz159981', name:'能源化工ETF'},
+    {code:'sz159980', name:'有色ETF'},
+    {code:'sh518880', name:'黄金ETF'},
+  ]},
+  { cat:'境内高波动', items:[
+    {code:'sh588000', name:'科创50ETF'},
+  ]},
+];
+let poolQuotes = {};  // code -> {price, chg, amp, rsi6}
+let poolSort = 'cat';  // cat | amp | rsi
+
+function makePoolItem(s){
+  const div=document.createElement('div');
+  div.className='pool-item'+(s.code===CODE?' active':'');
+  div.dataset.code=s.code;
+  const inWatch=watchList.some(x=>x.code===s.code);
+  div.innerHTML=
+    '<div><div class="pi-name">'+s.name+'</div><div class="pi-code">'+s.code.toUpperCase()+'</div></div>'+
+    '<div class="pi-right"><div class="pi-price">—</div><div class="pi-sub">—</div></div>'+
+    '<span class="pi-add'+(inWatch?' added':'')+'" title="加入自选">'+(inWatch?'✓':'＋')+'</span>';
+  div.addEventListener('click', e=>{
+    if(e.target.classList.contains('pi-add')) return;
+    switchStock(s.code);
+  });
+  div.querySelector('.pi-add').addEventListener('click', e=>{ e.stopPropagation(); addFromPool(s); });
+  return div;
+}
+
+function renderPool(){
+  const box=document.getElementById('poolList');
+  box.innerHTML='';
+  if(poolSort==='cat'){
+    // 按分类分组
+    STOCK_POOL.forEach(group=>{
+      const cat=document.createElement('div'); cat.className='pool-cat'; cat.textContent=group.cat; box.appendChild(cat);
+      group.items.forEach(s=>box.appendChild(makePoolItem(s)));
+    });
+  } else {
+    // 打平后按振幅/RSI6降序
+    const all=STOCK_POOL.flatMap(g=>g.items);
+    const key = poolSort==='amp'?'amp':'rsi6';
+    all.sort((a,b)=>{
+      const va=(poolQuotes[a.code]||{})[key], vb=(poolQuotes[b.code]||{})[key];
+      return (vb==null?-1:vb)-(va==null?-1:va);
+    });
+    const cat=document.createElement('div'); cat.className='pool-cat';
+    cat.textContent = poolSort==='amp'?'按今日振幅 ↓':'按 RSI6 ↓';
+    box.appendChild(cat);
+    all.forEach(s=>box.appendChild(makePoolItem(s)));
+  }
+  updatePoolPrices();
+}
+
+function updatePoolPrices(){
+  document.querySelectorAll('#poolList .pool-item').forEach(div=>{
+    const code=div.dataset.code;
+    const q=poolQuotes[code]||{};
+    const chg=q.chg;
+    const cls = chg>0?'up':(chg<0?'down':'flat');
+    const pe=div.querySelector('.pi-price'), se=div.querySelector('.pi-sub');
+    pe.textContent = q.price!=null?q.price.toFixed(3):'—';
+    pe.className='pi-price '+cls;
+    // 副行: 涨跌% + 振幅 + RSI6
+    let sub='';
+    if(chg!=null) sub+=(chg>0?'+':'')+chg.toFixed(2)+'%';
+    if(q.amp!=null) sub+=' 振'+q.amp.toFixed(1)+'%';
+    if(q.rsi6!=null) sub+=' R'+q.rsi6.toFixed(0);
+    se.textContent=sub||'—';
+    se.className='pi-sub '+cls;
+    div.classList.toggle('active', code===CODE);
+    // 更新加入状态
+    const add=div.querySelector('.pi-add');
+    const inW=watchList.some(x=>x.code===code);
+    add.classList.toggle('added', inW); add.textContent=inW?'✓':'＋';
+  });
+}
+
+async function refreshPool(){
+  if(document.getElementById('tabPool').style.display==='none') return;  // 未打开池子不刷新
+  const all=STOCK_POOL.flatMap(g=>g.items);
+  for(const s of all){
+    const raw=await fetchQuote(s.code);
+    if(raw){ const p=raw.split('~');
+      const price=parseFloat(p[3]), pc=parseFloat(p[2]||p[4]), hi=parseFloat(p[33]||p[4]), lo=parseFloat(p[34]||p[5]);
+      const amp = pc? (hi-lo)/pc*100 : null;
+      poolQuotes[s.code]={...(poolQuotes[s.code]||{}), price, chg:parseFloat(p[32]), amp};
+    }
+    const prices=await loadMinuteByCode(s.code);
+    if(prices && prices.length>1){
+      const rr=calcRSI(prices,6); const last=[...rr].reverse().find(v=>v!=null);
+      if(last!=null) poolQuotes[s.code]={...(poolQuotes[s.code]||{}), rsi6:last};
+    }
+  }
+  if(poolSort==='cat') updatePoolPrices();
+  else renderPool();  // 排序模式下数据更新后重排
+}
+
+function addFromPool(s){
+  if(watchList.some(x=>x.code===s.code)){ switchStock(s.code); return; }
+  watchList.push({code:s.code, name:s.name}); saveWatch();
+  if(poolQuotes[s.code]) listQuotes[s.code]={...poolQuotes[s.code]};
+  renderList(); updatePoolPrices();
+}
+
+// Tab切换
+function switchTab(tab){
+  document.querySelectorAll('.sb-tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  document.getElementById('tabWatch').style.display = tab==='watch'?'':'none';
+  document.getElementById('tabPool').style.display = tab==='pool'?'':'none';
+  if(tab==='pool'){ renderPool(); refreshPool(); }
+}
+
 async function addStock(){
   const inp=document.getElementById('addInput');
   const code=normCode(inp.value);
@@ -278,6 +499,7 @@ async function addStock(){
   switchStock(code);
   refreshList();
 }
+
 function jsonp(url){
   return new Promise((resolve,reject)=>{
     const cb = 'cb_'+Math.random().toString(36).slice(2);
@@ -288,6 +510,7 @@ function jsonp(url){
     document.body.appendChild(s);
   });
 }
+
 // 腾讯实时行情: 返回 v_sz002384="..." 全局变量, 用script直接加载
 function loadQuote(){
   return new Promise((resolve,reject)=>{
@@ -298,6 +521,7 @@ function loadQuote(){
     document.body.appendChild(s);
   });
 }
+
 // 拉取完整分时数据(整日): 时间 价格 累计量 累计额 -> 均价=额/量/100
 async function loadMinute(){
   const url='https://web.ifzq.gtimg.cn/appstock/app/minute/query?code='+CODE+'&r='+Date.now();
@@ -315,7 +539,9 @@ async function loadMinute(){
     return ticks;
   }catch(e){ return null; }
 }
+
 function fmt(n){ return Number(n).toFixed(2); }
+
 function strategy(price, avg, hi, lo, chg){
   // TradingAgents 做T策略引擎
   const dev = price - avg;
@@ -341,6 +567,7 @@ function strategy(price, avg, hi, lo, chg){
   }
   return {cls,txt,dev};
 }
+
 function drawChart(ticks, pc){
   const cv=document.getElementById('chart');
   const dpr=window.devicePixelRatio||1;
@@ -404,6 +631,7 @@ function drawChart(ticks, pc){
   // 绘制RSI副图
   drawRSI();
 }
+
 // RSI - SMA递归平滑法(威尔德平滑), 等价于通达信/文华 RSI
 function calcRSI(prices, n){
   const out=new Array(prices.length).fill(null);
@@ -419,6 +647,7 @@ function calcRSI(prices, n){
   }
   return out;
 }
+
 function drawRSI(){
   const cv=document.getElementById('rsiChart');
   if(!chartState){ return; }
@@ -449,6 +678,7 @@ function drawRSI(){
     ctx.fillText('RSI6 '+lastV.toFixed(1), rw-4, 14); ctx.textAlign='left';
   }
 }
+
 // 十字光标 + tooltip
 function bindCrosshair(){
   const chart=document.getElementById('chart');
@@ -506,6 +736,7 @@ function bindCrosshair(){
     cv.addEventListener('touchend', ()=>{ tip.style.display='none'; redraw(); });
   });
 }
+
 async function update(){
   document.getElementById('updtime').textContent='刷新中…';
   try{
@@ -527,6 +758,7 @@ async function update(){
     const de=document.getElementById('dev'); de.textContent=(dev>=0?'强 +':'弱 ')+fmt(dev); de.className='val '+(dev>=0?'up':'down');
     document.getElementById('hl').innerHTML='<span class="up">'+fmt(hi)+'</span> / <span class="down">'+fmt(lo)+'</span>';
     document.getElementById('vol').textContent=(p[49]||'—')+' / '+(p[38]||'—')+'%';
+
     // 信号
     const sg=strategy(price,avg,hi,lo,chg);
     const se=document.getElementById('signal'); se.className='signal '+sg.cls; se.innerHTML=sg.txt;
@@ -535,6 +767,7 @@ async function update(){
     document.getElementById('lvR').textContent=fmt(hi);
     document.getElementById('lvA').textContent=fmt(avg);
     document.getElementById('lvS').textContent=fmt(lo);
+
     // 盘口
     let asks='',bids='';
     for(let i=5;i>=1;i--){ asks+='<div class="row"><span class="down">卖'+i+' '+p[18+ (i-1)*2 +1 -0]+'</span></div>'; }
@@ -544,16 +777,23 @@ async function update(){
     for(let i=5;i>=1;i--){ const pr=p[19+(i-1)*2], q=p[20+(i-1)*2]; asks+='<div class="row"><span>卖'+i+'</span><span>'+pr+'</span><span>'+q+'</span></div>'; }
     document.getElementById('bids').innerHTML=bids;
     document.getElementById('asks').innerHTML=asks;
+
     // 分时图: 拉取整日完整分时
     const ticks=await loadMinute();
     if(ticks && ticks.length){ drawChart(ticks, pc); }
     else { drawChart([], pc); }
+    // 回填当前股RSI6到左侧列表(即时更新, 不等列表轮询)
+    if(chartState && chartState.rsi6){
+      const lastR=[...chartState.rsi6].reverse().find(v=>v!=null);
+      if(lastR!=null){ listQuotes[CODE]={...(listQuotes[CODE]||{}), rsi6:lastR}; updateListPrices(); }
+    }
     const tf = t.length>=14 ? t.slice(0,4)+'-'+t.slice(4,6)+'-'+t.slice(6,8)+' '+t.slice(8,10)+':'+t.slice(10,12)+':'+t.slice(12,14) : t;
     document.getElementById('updtime').textContent='更新: '+tf+'（数据源:腾讯行情）';
   }catch(e){
     document.getElementById('updtime').textContent='刷新异常: '+e;
   }
 }
+
 document.getElementById('btnRefresh').onclick=update;
 document.getElementById('btnAuto').onclick=function(){
   auto=!auto; this.textContent='自动刷新: '+(auto?'开(每5秒)':'关'); this.className=auto?'on':'';
@@ -562,6 +802,15 @@ document.getElementById('btnAuto').onclick=function(){
 // 添加自选股
 document.getElementById('btnAdd').onclick=addStock;
 document.getElementById('addInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addStock(); });
+// Tab切换
+document.querySelectorAll('.sb-tab').forEach(b=>b.addEventListener('click', ()=>switchTab(b.dataset.tab)));
+// 股票池排序
+document.querySelectorAll('.ps-btn').forEach(b=>b.addEventListener('click', ()=>{
+  poolSort=b.dataset.sort;
+  document.querySelectorAll('.ps-btn').forEach(x=>x.classList.toggle('active', x===b));
+  renderPool();
+}));
+
 // 初始化
 const initStock=watchList.find(x=>x.code===CODE)||watchList[0];
 CODE=initStock.code;
@@ -572,6 +821,7 @@ bindCrosshair();
 update();
 timer=setInterval(update,5000);
 setInterval(refreshList, 8000);  // 列表价格每8秒刷新
+setInterval(refreshPool, 10000); // 股票池每10秒刷新(仅打开时)
 </script>
 </body>
 </html>
