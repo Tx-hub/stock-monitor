@@ -916,6 +916,11 @@ document.querySelectorAll('.collapsible .collap-head').forEach(h=>{
 function setView(view){
   document.body.dataset.view=view;
   document.querySelectorAll('.m-tab').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
+  // 同步 tabWatch/tabPool 内联display, 避免内联样式压制 CSS 视图切换规则
+  if(view==='watch'||view==='pool'){
+    document.getElementById('tabWatch').style.display = view==='watch'?'':'none';
+    document.getElementById('tabPool').style.display = view==='pool'?'':'none';
+  }
   if(view==='pool'){ renderPool(); refreshPool(); }
   if(view==='board'){ setTimeout(()=>{ if(chartState) drawChart(chartState.ticks, chartState.pc); }, 50); }
 }
