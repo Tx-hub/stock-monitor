@@ -18,6 +18,15 @@
   .pool-sort { display:flex; align-items:center; gap:4px; font-size:11px; color:#8a94a6; margin-bottom:8px; }
   .ps-btn { padding:3px 8px; font-size:11px; background:#f5f7fa; border:1px solid #e3e8ef; border-radius:5px; color:#8a94a6; cursor:pointer; }
   .ps-btn.active { background:#eaf2fb; border-color:#bcd7f2; color:#3b82c4; font-weight:600; }
+  /* 极阴尾排 */
+  .pool-src { display:flex; gap:6px; margin-bottom:8px; }
+  .src-btn { flex:1; padding:6px 0; font-size:12px; font-weight:600; background:#f5f7fa; border:1px solid #e3e8ef; border-radius:6px; color:#8a94a6; cursor:pointer; }
+  .src-btn.active { background:#3b82c4; border-color:#3b82c4; color:#fff; }
+  .jiyin-ctrl { display:flex; gap:6px; margin-bottom:6px; }
+  #btnJiyinScan { flex:1; background:#3b82c4; color:#fff; border-color:#3b82c4; font-weight:600; padding:7px 0; }
+  #btnJiyinStop { background:#e0475b; color:#fff; border-color:#e0475b; }
+  .jiyin-status { font-size:11px; color:#8a94a6; margin-bottom:6px; line-height:1.5; }
+  .pi-score { color:#e0475b; font-weight:600; }
   .pool-cat { font-size:11px; font-weight:600; color:#3b82c4; margin:8px 0 4px; padding-left:2px; }
   .pool-item { display:flex; justify-content:space-between; align-items:center; padding:7px 8px; border-radius:7px; cursor:pointer; margin-bottom:3px; border:1px solid transparent; }
   .pool-item:hover { background:#f2f6fb; }
@@ -232,14 +241,31 @@
     </div>
     <!-- 股票池面板 -->
     <div id="tabPool" style="display:none">
-      <div class="pool-tip">适合做T的高波动 T+0 ETF · 点击查看 · <b>＋</b>加入自选</div>
-      <div class="pool-sort">
-        <span>排序:</span>
-        <button class="ps-btn active" data-sort="cat">分类</button>
-        <button class="ps-btn" data-sort="amp">振幅<span class="ps-arrow">↓</span></button>
-        <button class="ps-btn" data-sort="rsi">RSI6<span class="ps-arrow">↓</span></button>
+      <div class="pool-src">
+        <button class="src-btn active" data-src="etf">ETF池</button>
+        <button class="src-btn" data-src="jiyin">极阴尾排</button>
       </div>
-      <div id="poolList"></div>
+      <!-- ETF池 -->
+      <div id="poolEtf">
+        <div class="pool-tip">适合做T的高波动 T+0 ETF · 点击查看 · <b>＋</b>加入自选</div>
+        <div class="pool-sort">
+          <span>排序:</span>
+          <button class="ps-btn active" data-sort="cat">分类</button>
+          <button class="ps-btn" data-sort="amp">振幅<span class="ps-arrow">↓</span></button>
+          <button class="ps-btn" data-sort="rsi">RSI6<span class="ps-arrow">↓</span></button>
+        </div>
+        <div id="poolList"></div>
+      </div>
+      <!-- 极阴尾排选股 -->
+      <div id="poolJiyin" style="display:none">
+        <div class="pool-tip">极阴尾排策略 · 扫全市场主板 · 得分降序 · Top1为当日票 · 仅供参考不构成投资建议</div>
+        <div class="jiyin-ctrl">
+          <button id="btnJiyinScan">▶ 开始扫描全市场</button>
+          <button id="btnJiyinStop" style="display:none">■ 停止</button>
+        </div>
+        <div class="jiyin-status" id="jiyinStatus">点击按钮开始（约1分钟，勿切走）</div>
+        <div id="jiyinList"></div>
+      </div>
     </div>
   </div>
 
@@ -645,6 +671,177 @@ function addFromPool(s){
   if(poolQuotes[s.code]) listQuotes[s.code]={...poolQuotes[s.code]};
   renderList(); updatePoolPrices();
 }
+
+// ==================== 极阴尾排 选股策略 (JS复刻通达信极阴27) ====================
+// 指标函数(对齐pandas语义, 已与Python逐项校验一致)
+function JY_EMA(x,n){ const e=new Array(x.length); const k=2/(n+1); e[0]=x[0]; for(let i=1;i<x.length;i++)e[i]=e[i-1]+(x[i]-e[i-1])*k; return e; }
+function JY_MA(x,n){ const r=new Array(x.length).fill(NaN); for(let i=n-1;i<x.length;i++){ let s=0; for(let k=0;k<n;k++)s+=x[i-k]; r[i]=s/n; } return r; }
+function JY_HHV(x,n){ const r=new Array(x.length).fill(NaN); for(let i=n-1;i<x.length;i++){ let m=-1e18; for(let k=0;k<n;k++)m=Math.max(m,x[i-k]); r[i]=m; } return r; }
+function JY_LLV(x,n){ const r=new Array(x.length).fill(NaN); for(let i=n-1;i<x.length;i++){ let m=1e18; for(let k=0;k<n;k++)m=Math.min(m,x[i-k]); r[i]=m; } return r; }
+
+// 判断最后一根(当日)是否满足极阴27, 返回得分或null
+function jiyinEval(bars, code, name){
+  const MINB=130; if(!bars || bars.length<MINB) return null;
+  const O=bars.map(b=>b.o),C=bars.map(b=>b.c),H=bars.map(b=>b.h),L=bars.map(b=>b.l);
+  const n=bars.length, i=n-1;
+  // j1
+  const j1=(C[i]-O[i])/O[i]*100 > -3;
+  // j9: L>REF(LLV(L,10),1) & H<REF(HHV(H,20),1)
+  const hhv20=JY_HHV(H,20), llv10=JY_LLV(L,10);
+  const j7=hhv20[i-1], j8=llv10[i-1];
+  const j9=(L[i]>j8) && (H[i]<j7);
+  // j11: MA(C,20)>REF(MA(C,20),1)
+  const ma20=JY_MA(C,20);
+  const j11=ma20[i]>ma20[i-1];
+  // j13: REF(EVERY(body<1.04,3),1) -> 判断 i-1,i-2,i-3 三根body<1.04
+  const bodyOK=k=>{ const mx=Math.max(C[k],O[k]), mn=Math.min(C[k],O[k]); return mn>0 && (mx/mn)<1.04; };
+  const j13 = bodyOK(i-1)&&bodyOK(i-2)&&bodyOK(i-3);
+  // j15
+  const j14=(C[i]-C[i-1])/C[i-1]*100;
+  const j15=(j14>=-9.5)&&(O[i]>0)&&(j14<4.99);
+  // j22
+  const j16=C.map((c,k)=>(c+H[k]+O[k])/3);
+  const ema5=JY_EMA(C,5), ema30=JY_EMA(C,30);
+  const j17arr=C.map((_,k)=>ema5[k]-ema30[k]);
+  const j17=j17arr[i];
+  const j18=JY_EMA(j16,112)[i];
+  const j19=JY_EMA(j17arr,5)[i];
+  const j20=O[i]>0? j17*1.5:0;
+  const j21=(C[i]-j18)/C[i]*100;
+  const j22=j17+j19+j20+j21;
+  // 板块
+  const num=code.slice(-6);
+  const board=(num.startsWith('60')||num.startsWith('00')) && !name.startsWith('S') && !name.startsWith('*');
+  const signal = j1 && j9 && j11 && j13 && j15 && (j22>0) && board && (C[i]<100);
+  if(!signal) return null;
+  return { code, name, close:+C[i].toFixed(2), chg:+j14.toFixed(2), score:+j22.toFixed(4) };
+}
+
+// 拉取某只票日线(腾讯前复权400根) + 补当日实时K线
+async function jiyinKline(code){
+  const r=await fetch('https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param='+code+',day,,,400,qfq');
+  const d=await r.json();
+  const stk=d.data&&d.data[code]; if(!stk) return null;
+  const buf=stk.qfqday||stk.day; if(!buf||!buf.length) return null;
+  const bars=buf.map(row=>({t:row[0],o:+row[1],c:+row[2],h:+row[3],l:+row[4],v:+row[5]}));
+  return bars;
+}
+// 用实时快照补/覆盖当日K线; 返回 {bars, hasToday}
+async function jiyinAttachToday(bars, code){
+  const today=new Date(); const ymd=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  if(bars.length && bars[bars.length-1].t.slice(0,10)===ymd) return {bars, hasToday:true};
+  const raw=await fetchQuote(code);  // qt.gtimg.cn 实时
+  if(!raw) return {bars, hasToday:false};
+  const p=raw.split('~');
+  const open=parseFloat(p[5]), price=parseFloat(p[3]), hi=parseFloat(p[33]), lo=parseFloat(p[34]), vol=parseFloat(p[6]);
+  if(!(price>0) || !(open>0)) return {bars, hasToday:false};
+  const nb=bars.slice();
+  nb.push({t:ymd, o:open, c:price, h:hi||price, l:lo||price, v:vol||0});
+  return {bars:nb, hasToday:true};
+}
+
+let jiyinScanning=false, jiyinAbort=false, jiyinResults=[];
+function jiyinSetStatus(t){ const el=document.getElementById('jiyinStatus'); if(el) el.textContent=t; }
+
+// 拉全市场主板列表(新浪分页), 缓存当天
+async function jiyinUniverse(){
+  const today=new Date().toISOString().slice(0,10);
+  try{ const c=JSON.parse(localStorage.getItem('jiyin_universe')); if(c&&c.date===today&&c.list.length) return c.list; }catch(e){}
+  const base='https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData';
+  const list=[];
+  for(const node of ['sh_a','sz_a']){
+    for(let page=1;page<=120;page++){
+      if(jiyinAbort) break;
+      let arr=[];
+      try{ const r=await fetch(base+'?page='+page+'&num=80&sort=symbol&asc=1&node='+node+'&symbol=&_s_r_a=page'); const t=await r.text(); arr=t.trim().startsWith('[')?JSON.parse(t):[]; }catch(e){ arr=[]; }
+      if(!arr.length) break;
+      arr.forEach(it=>{ const sym=it.symbol, nm=it.name; if(sym && (sym.slice(2).startsWith('60')||sym.slice(2).startsWith('00'))) list.push({code:sym,name:nm}); });
+      jiyinSetStatus('拉取股票池… '+node+' 第'+page+'页，累计'+list.length);
+      await new Promise(r=>setTimeout(r,40));
+    }
+  }
+  try{ localStorage.setItem('jiyin_universe', JSON.stringify({date:today,list})); }catch(e){}
+  return list;
+}
+
+async function jiyinScan(){
+  if(jiyinScanning) return;
+  jiyinScanning=true; jiyinAbort=false; jiyinResults=[];
+  document.getElementById('btnJiyinScan').style.display='none';
+  document.getElementById('btnJiyinStop').style.display='';
+  document.getElementById('jiyinList').innerHTML='';
+  try{
+    jiyinSetStatus('拉取全市场主板列表…');
+    const uni=await jiyinUniverse();
+    if(jiyinAbort){ jiyinSetStatus('已停止'); return; }
+    const total=uni.length; let done=0, miss=0;
+    jiyinSetStatus('开始扫描 '+total+' 只…');
+    const CHUNK=10;
+    for(let i=0;i<uni.length && !jiyinAbort;i+=CHUNK){
+      const batch=uni.slice(i,i+CHUNK);
+      await Promise.all(batch.map(async s=>{
+        for(let retry=0;retry<2;retry++){
+          try{
+            let bars=await jiyinKline(s.code);
+            if(!bars){ miss++; return; }
+            const {bars:nb,hasToday}=await jiyinAttachToday(bars, s.code);
+            if(!hasToday){ miss++; return; }  // 当日缺失, 不用昨天冒充
+            const r=jiyinEval(nb, s.code, s.name);
+            if(r) jiyinResults.push(r);
+            return;
+          }catch(e){ if(retry===1) miss++; await new Promise(r=>setTimeout(r,200)); }
+        }
+      }));
+      done+=batch.length;
+      jiyinSetStatus('扫描中 '+Math.min(done,total)+'/'+total+'，命中 '+jiyinResults.length+'，缺失 '+miss);
+      await new Promise(r=>setTimeout(r,120));
+    }
+    if(jiyinAbort){ jiyinSetStatus('已停止，已扫 '+done+'/'+total+'，命中 '+jiyinResults.length); }
+    jiyinResults.sort((a,b)=>b.score-a.score);
+    jiyinResults=jiyinResults.filter(r=>r.score>0);
+    jiyinRender();
+    if(!jiyinAbort){
+      if(jiyinResults.length){ const t1=jiyinResults[0]; jiyinSetStatus('完成！命中 '+jiyinResults.length+' 只。当日Top1: '+t1.name+' '+t1.code.toUpperCase()+' 得分'+t1.score); }
+      else jiyinSetStatus('完成，当日无满足极阴27的个股（无票）');
+    }
+  }catch(e){ jiyinSetStatus('扫描出错: '+e.message); }
+  finally{
+    jiyinScanning=false;
+    document.getElementById('btnJiyinScan').style.display=''; document.getElementById('btnJiyinScan').textContent='▶ 重新扫描';
+    document.getElementById('btnJiyinStop').style.display='none';
+  }
+}
+
+function jiyinRender(){
+  const box=document.getElementById('jiyinList'); box.innerHTML='';
+  if(!jiyinResults.length) return;
+  const cat=document.createElement('div'); cat.className='pool-cat'; cat.textContent='极阴尾排 · 得分降序（Top1为当日票）'; box.appendChild(cat);
+  jiyinResults.forEach((s,idx)=>{
+    const div=document.createElement('div');
+    div.className='pool-item'+(s.code===CODE?' active':'');
+    div.dataset.code=s.code;
+    const inW=watchList.some(x=>x.code===s.code);
+    const cls=s.chg>0?'up':(s.chg<0?'down':'flat');
+    div.innerHTML=
+      '<div><div class="pi-name">'+(idx+1)+'. '+s.name+'</div><div class="pi-code">'+s.code.toUpperCase()+'</div></div>'+
+      '<div class="pi-right"><div class="pi-price '+cls+'">'+s.close.toFixed(2)+'</div><div class="pi-sub '+cls+'">'+(s.chg>0?'+':'')+s.chg.toFixed(2)+'% <span class="pi-score">分'+s.score.toFixed(1)+'</span></div></div>'+
+      '<span class="pi-add'+(inW?' added':'')+'">'+(inW?'✓':'＋')+'</span>';
+    div.addEventListener('click', e=>{ if(e.target.classList.contains('pi-add'))return; switchStock(s.code); });
+    div.querySelector('.pi-add').addEventListener('click', e=>{ e.stopPropagation(); addFromPool(s); });
+    box.appendChild(div);
+  });
+}
+
+// 来源切换 + 扫描按钮绑定
+document.querySelectorAll('.src-btn').forEach(b=>b.addEventListener('click', ()=>{
+  const src=b.dataset.src;
+  document.querySelectorAll('.src-btn').forEach(x=>x.classList.toggle('active', x===b));
+  document.getElementById('poolEtf').style.display = src==='etf'?'':'none';
+  document.getElementById('poolJiyin').style.display = src==='jiyin'?'':'none';
+}));
+document.getElementById('btnJiyinScan').onclick=jiyinScan;
+document.getElementById('btnJiyinStop').onclick=()=>{ jiyinAbort=true; jiyinSetStatus('正在停止…'); };
+
 
 // Tab切换
 function switchTab(tab){
