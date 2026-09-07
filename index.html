@@ -90,6 +90,14 @@
   .ana-agent.running .ana-text::after { content:'▋'; color:#3b82c4; animation:anaBlink 1s step-end infinite; }
   @keyframes anaBlink { 50%{ opacity:0; } }
   .ana-agent .ana-text:empty::before { content:'思考中…'; color:#b0b8c4; }
+  /* ===== 云同步面板 ===== */
+  .sync-row { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+  .sync-row input { flex:1; min-width:140px; border:1px solid #d5dce6; border-radius:6px; padding:7px 8px; font-size:13px; color:#2c3e50; }
+  #btnSaveToken { background:#3b82c4; color:#fff; border-color:#3b82c4; font-weight:600; }
+  .sync-status { font-size:13px; color:#3b4a5a; margin-bottom:6px; }
+  #syncStatus { font-weight:600; }
+  .sync-tip { font-size:11px; color:#8a94a6; line-height:1.5; }
+  .sync-tip a { color:#3b82c4; }
   .book { display:grid; grid-template-columns:1fr 1fr; gap:16px; font-size:13px; }
   .book .row { display:flex; justify-content:space-between; padding:2px 0; }
   table { width:100%; font-size:12px; border-collapse:collapse; }
@@ -110,6 +118,7 @@
     body { padding:0 0 64px 0; background:#f5f7fa; }
     /* iOS聚焦input字号<16px会自动缩放页面, 手机端提到16px规避 */
     .sidebar .add-box input { font-size:16px; padding:7px 8px; }
+    .sync-row input { font-size:16px; }
     .layout { flex-direction:column; gap:0; max-width:100%; }
     /* 侧边栏(自选/股票池)默认隐藏, 由视图切换控制 */
     .sidebar { width:100%; position:static; border-radius:0; border:none; box-shadow:none; padding:10px 10px 4px; display:none; }
@@ -178,6 +187,9 @@
     body[data-view="more"] #analysisPanel { display:block; }  /* 深度分析仅在更多视图显示 */
     body[data-view="board"] #analysisPanel, body[data-view="watch"] #analysisPanel,
     body[data-view="pool"] #analysisPanel { display:none; }
+    body[data-view="more"] #syncPanel { display:block; margin:0 14px 12px; }  /* 云同步仅在更多视图显示 */
+    body[data-view="board"] #syncPanel, body[data-view="watch"] #syncPanel,
+    body[data-view="pool"] #syncPanel { display:none; }
     body[data-view="more"] .ctrl { display:flex; flex-wrap:wrap; gap:8px; padding:14px; }
     body[data-view="more"] .sub { display:block; padding:0 14px; }
     body[data-view="more"] #metricGrid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; padding:14px; }
@@ -240,6 +252,17 @@
     <button id="btnAuto" class="on">自动刷新: 开(每5秒)</button>
     <button id="btnAnalyze">🧠 TradingAgents 深度分析</button>
     <span class="tip">数据源腾讯行情·完整分时·仅供参考不构成投资建议</span>
+  </div>
+
+  <div class="panel" id="syncPanel">
+    <h2>☁️ 自选云同步</h2>
+    <div class="sync-row">
+      <input id="ghTokenInp" type="password" placeholder="GitHub token(需gist权限)" autocomplete="off" />
+      <button id="btnSaveToken">保存并同步</button>
+      <button id="btnSyncNow">立即同步</button>
+    </div>
+    <div class="sync-status">状态: <span id="syncStatus">未配置</span></div>
+    <div class="sync-tip">手机/电脑填同一个 GitHub token 即可自动同步自选。token 仅存本地浏览器，不会上传仓库。<a href="https://github.com/settings/tokens/new?scopes=gist&description=stock-monitor" target="_blank">点此创建token</a>(勾选 gist 权限)。</div>
   </div>
 
   <div class="grid" id="metricGrid">
@@ -340,7 +363,13 @@ function loadWatch(){
   try{ const s=JSON.parse(localStorage.getItem('watchlist')); if(s&&s.length) return s; }catch(e){}
   return DEFAULT_LIST.slice();
 }
-function saveWatch(){ localStorage.setItem('watchlist', JSON.stringify(watchList)); }
+function saveWatch(){ localStorage.setItem('watchlist', JSON.stringify(watchList)); schedulePush(); }
+
+// ===== 云同步: 软删除墓碑 =====
+function loadRemoved(){ try{ return JSON.parse(localStorage.getItem('watch_removed'))||[]; }catch(e){ return []; } }
+function saveRemoved(arr){ localStorage.setItem('watch_removed', JSON.stringify(arr.slice(-50))); }
+function markRemoved(code){ const r=loadRemoved().filter(c=>c!==code); r.push(code); saveRemoved(r); }
+function unmarkRemoved(code){ saveRemoved(loadRemoved().filter(c=>c!==code)); }
 
 // 标准化输入为 sz/sh + 6位代码
 function normCode(input){
@@ -440,6 +469,7 @@ function switchStock(code){
 function removeStock(code){
   if(watchList.length<=1) return;
   watchList=watchList.filter(x=>x.code!==code);
+  markRemoved(code);  // 记墓碑, 跨设备生效删除
   saveWatch();
   if(code===CODE){ switchStock(watchList[0].code); }
   else renderList();
@@ -641,6 +671,7 @@ async function addStock(){
   const raw=await fetchQuote(code);
   const name = raw ? raw.split('~')[1] : code;
   if(!raw || !name){ inp.placeholder='代码无效'; inp.value=''; return; }
+  unmarkRemoved(code);  // 重新加入: 清除墓碑
   watchList.push({code, name}); saveWatch();
   inp.value='';
   listQuotes[code]={price:parseFloat(raw.split('~')[3]), chg:parseFloat(raw.split('~')[32])};
@@ -652,6 +683,7 @@ async function addStock(){
 function addByCode(code, name){
   document.getElementById('addInput').value='';
   if(watchList.some(x=>x.code===code)){ switchStock(code); return; }
+  unmarkRemoved(code);  // 重新加入: 清除墓碑
   watchList.push({code, name}); saveWatch();
   renderList(); switchStock(code); refreshList();
 }
@@ -1140,6 +1172,104 @@ async function runDeepAnalysis(){
   }
 }
 document.getElementById('btnAnalyze').onclick=runDeepAnalysis;
+
+// ===== 自选股云端同步 (GitHub Gist) =====
+// ⚠️ token 属用户敏感信息, 仅存本地 localStorage, 绝不写入代码或提交仓库。
+function ghToken(){ return localStorage.getItem('gh_token')||''; }
+function gistId(){ return localStorage.getItem('gist_id')||''; }
+let pushTimer=null;
+function setSyncStatus(txt){ const el=document.getElementById('syncStatus'); if(el) el.textContent=txt; }
+
+async function ghFetch(url, opts){
+  opts=opts||{};
+  opts.headers=Object.assign({ 'Authorization':'Bearer '+ghToken(), 'Accept':'application/vnd.github+json' }, opts.headers||{});
+  return fetch(url, opts);
+}
+// 创建private gist, 返回id
+async function gistCreate(payload){
+  const r=await ghFetch('https://api.github.com/gists',{ method:'POST', body:JSON.stringify({ description:'stock-monitor-watchlist', public:false, files:{ 'watchlist.json':{ content:JSON.stringify(payload) } } }) });
+  if(!r.ok) throw new Error('create '+r.status);
+  const d=await r.json(); localStorage.setItem('gist_id', d.id); return d.id;
+}
+async function gistRead(id){
+  const r=await ghFetch('https://api.github.com/gists/'+id+'?_='+Date.now());
+  if(r.status===404) return null;
+  if(!r.ok) throw new Error('read '+r.status);
+  const d=await r.json();
+  try{ return JSON.parse(d.files['watchlist.json'].content); }catch(e){ return null; }
+}
+async function gistWrite(id, payload){
+  const r=await ghFetch('https://api.github.com/gists/'+id,{ method:'PATCH', body:JSON.stringify({ files:{ 'watchlist.json':{ content:JSON.stringify(payload) } } }) });
+  if(!r.ok) throw new Error('write '+r.status);
+}
+
+// 合并去重: (本地∪云端items)去重 - (本地∪云端removed)
+function mergeWatch(localItems, localRemoved, remote){
+  const rItems=(remote&&remote.items)||[], rRemoved=(remote&&remote.removed)||[];
+  const removed=Array.from(new Set([...localRemoved, ...rRemoved]));
+  const removedSet=new Set(removed);
+  const seen=new Set(), items=[];
+  for(const s of [...localItems, ...rItems]){
+    if(!s||!s.code||removedSet.has(s.code)||seen.has(s.code)) continue;
+    seen.add(s.code); items.push({code:s.code, name:s.name});
+  }
+  return { items, removed:removed.slice(-50) };
+}
+
+let syncing=false;
+async function syncPull(){
+  if(!ghToken()){ setSyncStatus('未配置'); return; }
+  if(syncing) return; syncing=true; setSyncStatus('同步中…');
+  try{
+    let id=gistId();
+    const payloadNow={ items:watchList, removed:loadRemoved(), ts:Date.now() };
+    if(!id){ await gistCreate(payloadNow); setSyncStatus('已同步 '+new Date().toLocaleTimeString()); syncing=false; return; }
+    const remote=await gistRead(id);
+    if(remote===null){ await gistCreate(payloadNow); setSyncStatus('已重建并同步'); syncing=false; return; }
+    const merged=mergeWatch(watchList, loadRemoved(), remote);
+    if(merged.items.length){ watchList=merged.items; }
+    saveRemoved(merged.removed);
+    localStorage.setItem('watchlist', JSON.stringify(watchList));  // 直接存, 不触发push
+    renderList(); refreshList();
+    await gistWrite(id, { items:watchList, removed:merged.removed, ts:Date.now() });
+    setSyncStatus('已同步 '+new Date().toLocaleTimeString());
+  }catch(e){ setSyncStatus('同步失败: '+e.message); }
+  syncing=false;
+}
+async function syncPushNow(){
+  if(!ghToken()) return;
+  try{
+    let id=gistId();
+    const payload={ items:watchList, removed:loadRemoved(), ts:Date.now() };
+    if(!id){ await gistCreate(payload); } else { await gistWrite(id, payload); }
+    setSyncStatus('已同步 '+new Date().toLocaleTimeString());
+  }catch(e){ setSyncStatus('同步失败: '+e.message); }
+}
+function schedulePush(){
+  if(!ghToken()||!gistId()) return;
+  clearTimeout(pushTimer); pushTimer=setTimeout(syncPushNow, 800);
+}
+
+// UI 绑定
+(function(){
+  const tokenInp=document.getElementById('ghTokenInp');
+  const saveBtn=document.getElementById('btnSaveToken');
+  const syncBtn=document.getElementById('btnSyncNow');
+  if(tokenInp) tokenInp.value = ghToken()? '••••••••'+ghToken().slice(-4) : '';
+  if(saveBtn) saveBtn.onclick=async()=>{
+    const v=tokenInp.value.trim();
+    if(v && v.indexOf('••••')<0){ localStorage.setItem('gh_token', v); }
+    if(!ghToken()){ setSyncStatus('请输入token'); return; }
+    tokenInp.value='••••••••'+ghToken().slice(-4);
+    await syncPull();
+  };
+  if(syncBtn) syncBtn.onclick=syncPull;
+  setSyncStatus(ghToken()? '已配置(点立即同步)' : '未配置');
+})();
+
+// 页面加载后自动拉取(不阻塞行情)
+if(ghToken()) setTimeout(syncPull, 1500);
+
 
 // 添加自选股
 document.getElementById('btnAdd').onclick=addStock;
