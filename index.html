@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>东山精密 002384 · TradingAgents 做T盯盘</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:#f5f7fa; color:#2c3e50; padding:12px; }
+  .layout { max-width:1240px; margin:0 auto; display:flex; gap:12px; align-items:flex-start; }
+  .sidebar { width:230px; flex-shrink:0; background:#fff; border:1px solid #e3e8ef; border-radius:10px; padding:10px; box-shadow:0 1px 3px rgba(60,80,120,.06); position:sticky; top:12px; }
+  .sidebar .sb-title { font-size:13px; font-weight:600; color:#1a2733; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
+  .sidebar .add-box { display:flex; gap:4px; margin-bottom:8px; }
+  .sidebar .add-box input { flex:1; min-width:0; border:1px solid #d5dce6; border-radius:6px; padding:6px 8px; font-size:12px; color:#2c3e50; }
+  .sidebar .add-box button { padding:6px 10px; font-size:12px; }
+  .stock-item { display:flex; justify-content:space-between; align-items:center; padding:8px 8px; border-radius:7px; cursor:pointer; margin-bottom:3px; border:1px solid transparent; transition:background .15s; }
+  .stock-item:hover { background:#f2f6fb; }
+  .stock-item.active { background:#eaf2fb; border-color:#bcd7f2; }
+  .stock-item.dragging { opacity:.4; }
+  .stock-item.drag-over { border-color:#3b82c4; border-style:dashed; background:#f0f7ff; }
+  .stock-item .si-mid { display:flex; align-items:center; }
+  .stock-item .si-left .si-name { font-size:13px; font-weight:600; color:#1a2733; }
+  .stock-item .si-left .si-code { font-size:10px; color:#8a94a6; }
+  .stock-item .si-right { text-align:right; }
+  .stock-item .si-right .si-price { font-size:13px; font-weight:600; }
+  .stock-item .si-right .si-chg { font-size:11px; }
+  .stock-item .si-del { color:#c8d0da; font-size:14px; margin-left:6px; padding:0 2px; }
+  .stock-item .si-del:hover { color:#e0475b; }
+  .wrap { flex:1; min-width:0; }
+  h1 { font-size:18px; margin-bottom:4px; color:#1a2733; }
+  .sub { font-size:12px; color:#8a94a6; margin-bottom:12px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; margin-bottom:12px; }
+  .card { background:#ffffff; border:1px solid #e3e8ef; border-radius:10px; padding:10px; box-shadow:0 1px 3px rgba(60,80,120,.06); }
+  .card .label { font-size:11px; color:#8a94a6; }
+  .card .val { font-size:20px; font-weight:600; margin-top:2px; color:#1a2733; }
+  .up { color:#e0475b; } .down { color:#1aae6f; } .flat{color:#1a2733;}
+  .panel { background:#ffffff; border:1px solid #e3e8ef; border-radius:10px; padding:12px; margin-bottom:12px; box-shadow:0 1px 3px rgba(60,80,120,.06); }
+  .panel h2 { font-size:14px; margin-bottom:8px; color:#3b82c4; }
+  #chart { width:100%; height:220px; display:block; background:#fbfcfe; border-radius:6px; border:1px solid #eef1f5; }
+  #rsiChart { width:100%; height:100px; display:block; background:#fbfcfe; border-radius:6px; border:1px solid #eef1f5; }
+  #tooltip { position:absolute; pointer-events:none; background:rgba(255,255,255,.97); border:1px solid #d5dce6; border-radius:6px; padding:8px 10px; font-size:12px; color:#2c3e50; box-shadow:0 2px 8px rgba(60,80,120,.15); display:none; z-index:10; line-height:1.6; white-space:nowrap; }
+  #tooltip b { color:#1a2733; }
+  .signal { padding:12px; border-radius:8px; font-size:15px; font-weight:600; margin-bottom:8px; line-height:1.6; }
+  .sig-buy { background:#eafaf1; border:1px solid #a3e4c4; color:#159a5f; }
+  .sig-sell { background:#fdecee; border:1px solid #f4b8c0; color:#d63a4d; }
+  .sig-wait { background:#fff8e8; border:1px solid #f5e0a8; color:#c08a1e; }
+  .levels { display:flex; gap:8px; flex-wrap:wrap; font-size:13px; }
+  .levels div { background:#f5f7fa; border:1px solid #e3e8ef; border-radius:6px; padding:6px 10px; }
+  .book { display:grid; grid-template-columns:1fr 1fr; gap:16px; font-size:13px; }
+  .book .row { display:flex; justify-content:space-between; padding:2px 0; }
+  table { width:100%; font-size:12px; border-collapse:collapse; }
+  td { padding:3px 4px; border-bottom:1px solid #eef1f5; }
+  .ctrl { display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+  button { background:#ffffff; color:#3b4a5a; border:1px solid #d5dce6; border-radius:6px; padding:6px 12px; cursor:pointer; font-size:13px; }
+  button:hover { background:#eef2f7; }
+  button.on { background:#3b82c4; border-color:#3b82c4; color:#fff; }
+  .tip { font-size:11px; color:#8a94a6; margin-top:4px; }
+  .flash { animation:fl .6s; } @keyframes fl { from{background:#fff3cd;} to{background:transparent;} }
+  /* 平板/手机: 侧边栏改为顶部横向滚动 */
+  @media (max-width:768px){
+    .layout { flex-direction:column; }
+    .sidebar { width:100%; position:static; }
+    #stockList { display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; }
+    .stock-item { flex:0 0 auto; min-width:130px; margin-bottom:0; }
+  }
+  /* 手机端适配 */
+  @media (max-width:600px){
+    body { padding:8px; }
+    h1 { font-size:16px; }
+    .grid { grid-template-columns:repeat(2,1fr); gap:6px; }
+    .card { padding:8px; border-radius:8px; }
+    .card .val { font-size:17px; }
+    .card .label { font-size:10px; }
+    .panel { padding:10px; }
+    #chart { height:180px; }
+    .signal { font-size:14px; padding:10px; }
+    .levels { font-size:12px; }
+    .book { grid-template-columns:1fr 1fr; gap:8px; font-size:12px; }
+    .ctrl { gap:6px; }
+    button { flex:1; min-width:110px; padding:8px; font-size:13px; }
+    .ctrl .tip { flex-basis:100%; }
+    table { font-size:11px; }
+  }
+  @media (max-width:360px){
+    .grid { grid-template-columns:1fr 1fr; }
+    .card .val { font-size:15px; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <div class="sidebar">
+    <div class="sb-title"><span>自选股</span><span style="font-size:10px;color:#8a94a6;font-weight:400">点击切换</span></div>
+    <div class="add-box">
+      <input id="addInput" placeholder="代码/名称 如 600519" />
+      <button id="btnAdd">添加</button>
+    </div>
+    <div id="stockList"></div>
+  </div>
+  <div class="wrap">
+  <h1 id="mainTitle">— · TradingAgents 做T盯盘</h1>
+  <div class="sub" id="updtime">加载中…</div>
+  <div class="ctrl">
+    <button id="btnRefresh">立即刷新</button>
+    <button id="btnAuto" class="on">自动刷新: 开(每5秒)</button>
+    <span class="tip">数据源腾讯行情·完整分时·仅供参考不构成投资建议</span>
+  </div>
+  <div class="grid">
+    <div class="card"><div class="label">现价</div><div class="val" id="price">—</div></div>
+    <div class="card"><div class="label">涨跌幅</div><div class="val" id="chg">—</div></div>
+    <div class="card"><div class="label">均价线</div><div class="val" id="avg">—</div></div>
+    <div class="card"><div class="label">现价 vs 均价</div><div class="val" id="dev">—</div></div>
+    <div class="card"><div class="label">今高 / 今低</div><div class="val" id="hl" style="font-size:15px">—</div></div>
+    <div class="card"><div class="label">量比 / 换手</div><div class="val" id="vol" style="font-size:15px">—</div></div>
+  </div>
+  <div class="panel">
+    <h2>TradingAgents · 做T策略信号</h2>
+    <div class="signal" id="signal">等待数据…</div>
+    <div class="levels" id="levels"></div>
+  </div>
+  <div class="panel" style="position:relative">
+    <h2>今日分时图（红=分时价 · 黄=均价线 · 蓝=MA5 · 紫=MA10 · 灰虚线=昨收）</h2>
+    <canvas id="chart"></canvas>
+    <h2 style="margin-top:10px">RSI6（SMA递归平滑法 / 威尔德平滑）</h2>
+    <canvas id="rsiChart"></canvas>
+    <div id="tooltip"></div>
+  </div>
+  <div class="panel">
+    <h2>五档盘口</h2>
+    <div class="book">
+      <div><div style="color:#3fb950;margin-bottom:4px">卖盘</div><div id="asks"></div></div>
+      <div><div style="color:#f85149;margin-bottom:4px">买盘</div><div id="bids"></div></div>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>策略说明</h2>
+    <table>
+      <tr><td>压力位</td><td id="lvR">今日最高</td><td>冲高不过→<b style="color:#f85149">倒T减仓(先卖)</b></td></tr>
+      <tr><td>生命线</td><td id="lvA">均价线</td><td>站上偏强持有 / 跌破→减T信号</td></tr>
+      <tr><td>支撑位</td><td id="lvS">今日最低</td><td>跌破→反弹转弱，当日停止做T</td></tr>
+    </table>
+    <div class="tip">正T=先低吸后高抛(空仓/加仓思路)；倒T=先高抛后低吸(持有底仓日内滚差价)。破位止损，只用小仓位。</div>
+  </div>
+  </div><!-- /.wrap -->
+</div><!-- /.layout -->
+<script>
+let CODE = 'sz002384';
+let timer = null, auto = true, lastPrice = null;
+let chartState = null;  // 存储最近一次绘图数据供tooltip使用
+// ===== 自选股列表管理 =====
+const DEFAULT_LIST = [
+  {code:'sz002384', name:'东山精密'},
+  {code:'sh600066', name:'宇通客车'},
+  {code:'sz002709', name:'天赐材料'},
+  {code:'sz000333', name:'美的集团'},
+  {code:'sh601088', name:'中国神华'},
+];
+let watchList = loadWatch();
+let listQuotes = {};  // code -> {price, chg}
+function loadWatch(){
+  try{ const s=JSON.parse(localStorage.getItem('watchlist')); if(s&&s.length) return s; }catch(e){}
+  return DEFAULT_LIST.slice();
+}
+function saveWatch(){ localStorage.setItem('watchlist', JSON.stringify(watchList)); }
+// 标准化输入为 sz/sh + 6位代码
+function normCode(input){
+  input=input.trim();
+  const m=input.match(/(\d{6})/);
+  if(!m) return null;
+  const c=m[1];
+  if(/^(sh|sz)/i.test(input)) return input.slice(0,2).toLowerCase()+c;
+  // 6开头沪市, 其他深市/北交所(8/4->bj)
+  if(c[0]==='6') return 'sh'+c;
+  if(c[0]==='8'||c[0]==='4'||c.startsWith('92')) return 'bj'+c;
+  return 'sz'+c;
+}
+let dragIndex=null;
+// 重建列表结构(增删/排序/切换时调用)
+function renderList(){
+  const box=document.getElementById('stockList');
+  box.innerHTML='';
+  watchList.forEach((s,idx)=>{
+    const div=document.createElement('div');
+    div.className='stock-item'+(s.code===CODE?' active':'');
+    div.dataset.code=s.code;
+    div.dataset.idx=idx;
+    div.draggable=true;
+    div.innerHTML=
+      '<div class="si-left"><div class="si-name">'+s.name+'</div><div class="si-code">'+s.code.toUpperCase()+'</div></div>'+
+      '<div class="si-mid">'+
+        '<div class="si-right"><div class="si-price">—</div><div class="si-chg">—</div></div>'+
+        '<span class="si-del" title="删除">×</span>'+
+      '</div>';
+    // 整行点击切换(排除删除按钮)
+    div.addEventListener('click', e=>{
+      if(e.target.classList.contains('si-del')) return;
+      switchStock(s.code);
+    });
+    div.querySelector('.si-del').addEventListener('click', e=>{ e.stopPropagation(); removeStock(s.code); });
+    // 拖动排序
+    div.addEventListener('dragstart', e=>{ dragIndex=idx; div.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
+    div.addEventListener('dragend', ()=>{ div.classList.remove('dragging'); document.querySelectorAll('.stock-item').forEach(x=>x.classList.remove('drag-over')); });
+    div.addEventListener('dragover', e=>{ e.preventDefault(); div.classList.add('drag-over'); });
+    div.addEventListener('dragleave', ()=>div.classList.remove('drag-over'));
+    div.addEventListener('drop', e=>{
+      e.preventDefault(); div.classList.remove('drag-over');
+      const to=idx;
+      if(dragIndex===null||dragIndex===to) return;
+      const moved=watchList.splice(dragIndex,1)[0];
+      watchList.splice(to,0,moved);
+      dragIndex=null; saveWatch(); renderList(); updateListPrices();
+    });
+    box.appendChild(div);
+  });
+  updateListPrices();
+}
+// 只更新价格(不重建DOM, 避免点击失效)
+function updateListPrices(){
+  document.querySelectorAll('#stockList .stock-item').forEach(div=>{
+    const code=div.dataset.code;
+    const q=listQuotes[code]||{};
+    const chg=q.chg;
+    const cls = chg>0?'up':(chg<0?'down':'flat');
+    const pe=div.querySelector('.si-price'), ce=div.querySelector('.si-chg');
+    pe.textContent = q.price!=null?q.price.toFixed(2):'—';
+    ce.textContent = chg!=null?((chg>0?'+':'')+chg.toFixed(2)+'%'):'—';
+    pe.className='si-price '+cls; ce.className='si-chg '+cls;
+    div.classList.toggle('active', code===CODE);
+  });
+}
+function switchStock(code){
+  if(code===CODE) return;
+  CODE=code;
+  lastPrice=null; chartState=null;
+  const s=watchList.find(x=>x.code===code);
+  document.getElementById('mainTitle').textContent=(s?s.name:code)+' · TradingAgents 做T盯盘';
+  updateListPrices();
+  update();
+}
+function removeStock(code){
+  if(watchList.length<=1) return;
+  watchList=watchList.filter(x=>x.code!==code);
+  saveWatch();
+  if(code===CODE){ switchStock(watchList[0].code); }
+  else renderList();
+}
+// 拉取某只股票的行情(用于列表), 通过script全局变量
+function fetchQuote(code){
+  return new Promise((resolve)=>{
+    const s=document.createElement('script');
+    s.onload=()=>{ resolve(window['v_'+code]); s.remove(); };
+    s.onerror=()=>{ resolve(null); s.remove(); };
+    s.src='https://qt.gtimg.cn/q='+code+'&r='+Date.now();
+    document.body.appendChild(s);
+  });
+}
+async function refreshList(){
+  for(const s of watchList){
+    const raw=await fetchQuote(s.code);
+    if(raw){ const p=raw.split('~'); listQuotes[s.code]={price:parseFloat(p[3]), chg:parseFloat(p[32])};
+      // 自动补全名称
+      if((!s.name||s.name===s.code) && p[1]) s.name=p[1];
+    }
+  }
+  updateListPrices();
+}
+async function addStock(){
+  const inp=document.getElementById('addInput');
+  const code=normCode(inp.value);
+  if(!code){ inp.value=''; inp.placeholder='请输入6位代码'; return; }
+  if(watchList.some(x=>x.code===code)){ inp.value=''; switchStock(code); return; }
+  const raw=await fetchQuote(code);
+  const name = raw ? raw.split('~')[1] : code;
+  if(!raw || !name){ inp.placeholder='代码无效'; inp.value=''; return; }
+  watchList.push({code, name}); saveWatch();
+  inp.value='';
+  listQuotes[code]={price:parseFloat(raw.split('~')[3]), chg:parseFloat(raw.split('~')[32])};
+  switchStock(code);
+  refreshList();
+}
+function jsonp(url){
+  return new Promise((resolve,reject)=>{
+    const cb = 'cb_'+Math.random().toString(36).slice(2);
+    const s = document.createElement('script');
+    window[cb] = d => { resolve(d); delete window[cb]; s.remove(); };
+    s.onerror = () => { reject('load fail'); s.remove(); };
+    s.src = url + (url.includes('?')?'&':'?') + '_var=&callback='+cb;
+    document.body.appendChild(s);
+  });
+}
+// 腾讯实时行情: 返回 v_sz002384="..." 全局变量, 用script直接加载
+function loadQuote(){
+  return new Promise((resolve,reject)=>{
+    const s=document.createElement('script');
+    s.onload=()=>{ const v=window['v_'+CODE]; resolve(v); s.remove(); };
+    s.onerror=()=>{ reject('quote fail'); s.remove(); };
+    s.src='https://qt.gtimg.cn/q='+CODE+'&r='+Date.now();
+    document.body.appendChild(s);
+  });
+}
+// 拉取完整分时数据(整日): 时间 价格 累计量 累计额 -> 均价=额/量/100
+async function loadMinute(){
+  const url='https://web.ifzq.gtimg.cn/appstock/app/minute/query?code='+CODE+'&r='+Date.now();
+  try{
+    const r=await fetch(url,{cache:'no-store'});
+    const d=await r.json();
+    const node=d.data && d.data[CODE] && d.data[CODE].data && d.data[CODE].data.data;
+    if(!node) return null;
+    const ticks=node.map(line=>{
+      const s=line.split(' ');
+      const t=s[0], price=parseFloat(s[1]), vol=parseFloat(s[2]), amt=parseFloat(s[3]);
+      const avg = vol>0 ? amt/(vol*100) : price;
+      return { t:t.slice(0,2)+':'+t.slice(2), price, avg };
+    });
+    return ticks;
+  }catch(e){ return null; }
+}
+function fmt(n){ return Number(n).toFixed(2); }
+function strategy(price, avg, hi, lo, chg){
+  // TradingAgents 做T策略引擎
+  const dev = price - avg;
+  const nearHi = (hi - price)/price < 0.005;   // 距今高<0.5%
+  const nearLo = (price - lo)/price < 0.005;   // 距今低<0.5%
+  const belowAvg = price < avg;
+  let cls='sig-wait', txt='';
+  if(price <= lo*1.002){
+    cls='sig-wait';
+    txt='⚠️ 跌破/贴近今日最低 '+fmt(lo)+'：反弹转弱，<b>当日停止做T</b>，观望等企稳。';
+  } else if(nearHi && chg>2){
+    cls='sig-sell';
+    txt='🔴 冲高至今日高位 '+fmt(hi)+' 附近且涨幅+'+chg.toFixed(2)+'%：<b>倒T减仓点(先卖)</b>，减不超底仓1/3，等回踩均价 '+fmt(avg)+' 补回。';
+  } else if(belowAvg){
+    cls='sig-sell';
+    txt='🟠 现价跌破均价线 '+fmt(avg)+'（弱于均价 '+fmt(dev)+'）：偏弱信号，<b>持有者可减T</b>；已减仓的别急补，看能否收回均价。';
+  } else if(price>avg && !nearHi){
+    cls='sig-buy';
+    txt='🟢 站稳均价线上方（强于均价 +'+fmt(dev)+'）：走势偏强。<b>正T可回踩均价 '+fmt(avg)+' 附近低吸</b>；追高需谨慎，勿在高位追单。';
+  } else {
+    cls='sig-wait';
+    txt='⏸️ 现价在均价附近震荡：<b>等方向明确</b>。站上均价偏多做正T，跌破偏空做倒T。';
+  }
+  return {cls,txt,dev};
+}
+function drawChart(ticks, pc){
+  const cv=document.getElementById('chart');
+  const dpr=window.devicePixelRatio||1;
+  const w=cv.clientWidth, h=cv.clientHeight;
+  cv.width=w*dpr; cv.height=h*dpr;
+  const ctx=cv.getContext('2d'); ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,w,h);
+  if(!ticks.length){
+    ctx.fillStyle='#8a94a6'; ctx.font='13px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('暂无分时数据（休市或数据加载中）', w/2, h/2);
+    ctx.textAlign='left';
+    chartState=null;
+    const rc=document.getElementById('rsiChart'); const rctx=rc.getContext('2d'); rctx.clearRect(0,0,rc.width,rc.height);
+    return;
+  }
+  const prices=ticks.map(t=>t.price), avgs=ticks.map(t=>t.avg);
+  const all=prices.concat(avgs).concat([pc]);
+  let mn=Math.min(...all), mx=Math.max(...all);
+  const pad=(mx-mn)*0.1||0.5; mn-=pad; mx+=pad;
+  // 整日横轴固定240分钟, 未走完部分留白
+  const total=240;
+  const X=i=>40+i/(total-1)*(w-50);
+  const Y=v=>h-24-(v-mn)/(mx-mn)*(h-38);
+  // 计算 MA5/MA10 与 RSI6
+  const maFn=n=> prices.map((_,i)=> i<n-1 ? null : prices.slice(i-n+1,i+1).reduce((a,b)=>a+b,0)/n );
+  const ma5=maFn(5), ma10=maFn(10);
+  const rsi6=calcRSI(prices,6);
+  // 保存状态供 tooltip / RSI副图使用
+  chartState={ ticks, prices, avgs, ma5, ma10, rsi6, pc, mn, mx, X, Y, w, h, total };
+  // 网格 + Y轴标签
+  ctx.strokeStyle='#eef1f5'; ctx.fillStyle='#8a94a6'; ctx.font='10px sans-serif';
+  for(let k=0;k<=4;k++){ const v=mn+(mx-mn)*k/4; const y=Y(v);
+    ctx.beginPath(); ctx.moveTo(40,y); ctx.lineTo(w,y); ctx.stroke();
+    ctx.fillText(v.toFixed(2), 2, y+3); }
+  // 昨收基准线(灰虚线)
+  ctx.strokeStyle='#c8d0da'; ctx.setLineDash([4,3]); ctx.lineWidth=1; ctx.beginPath();
+  ctx.moveTo(40,Y(pc)); ctx.lineTo(w,Y(pc)); ctx.stroke(); ctx.setLineDash([]);
+  // 均价线(黄)
+  ctx.strokeStyle='#e0a020'; ctx.lineWidth=1.5; ctx.beginPath();
+  avgs.forEach((v,i)=>{ i?ctx.lineTo(X(i),Y(v)):ctx.moveTo(X(i),Y(v)); }); ctx.stroke();
+  // 分时价(红)
+  ctx.strokeStyle='#e0475b'; ctx.lineWidth=1.8; ctx.beginPath();
+  prices.forEach((v,i)=>{ i?ctx.lineTo(X(i),Y(v)):ctx.moveTo(X(i),Y(v)); }); ctx.stroke();
+  // 移动均线 MA5(蓝) / MA10(紫)
+  function drawMA(data,color){
+    ctx.strokeStyle=color; ctx.lineWidth=1.2; ctx.beginPath(); let started=false;
+    data.forEach((v,i)=>{ if(v==null) return; if(!started){ ctx.moveTo(X(i),Y(v)); started=true; } else ctx.lineTo(X(i),Y(v)); });
+    ctx.stroke();
+  }
+  drawMA(ma5,'#2f80ed');   // MA5 蓝
+  drawMA(ma10,'#9b51e0');  // MA10 紫
+  // X轴时间刻度: 9:30 / 11:30 / 14:00 / 15:00
+  ctx.fillStyle='#8a94a6'; ctx.font='10px sans-serif';
+  ctx.fillText('9:30', 40, h-8);
+  ctx.textAlign='center';
+  ctx.fillText('11:30/13:00', X(120), h-8);
+  ctx.textAlign='right'; ctx.fillText('15:00', w-2, h-8); ctx.textAlign='left';
+  // 午间分界竖线
+  ctx.strokeStyle='#eef1f5'; ctx.setLineDash([2,3]); ctx.beginPath();
+  ctx.moveTo(X(120),Y(mx-pad*0.5)); ctx.lineTo(X(120),h-24); ctx.stroke(); ctx.setLineDash([]);
+  // 绘制RSI副图
+  drawRSI();
+}
+// RSI - SMA递归平滑法(威尔德平滑), 等价于通达信/文华 RSI
+function calcRSI(prices, n){
+  const out=new Array(prices.length).fill(null);
+  if(prices.length<2) return out;
+  let smUp=0, smDn=0;  // 平滑后的涨幅/跌幅
+  for(let i=1;i<prices.length;i++){
+    const diff=prices[i]-prices[i-1];
+    const up=Math.max(diff,0), dn=Math.abs(Math.min(diff,0));
+    if(i===1){ smUp=up; smDn=dn; }
+    else { smUp=(smUp*(n-1)+up)/n; smDn=(smDn*(n-1)+dn)/n; }  // 递归平滑: SMA(X,N,1)
+    const rs = smDn===0 ? 100 : 100*smUp/(smUp+smDn);
+    out[i]=rs;
+  }
+  return out;
+}
+function drawRSI(){
+  const cv=document.getElementById('rsiChart');
+  if(!chartState){ return; }
+  const {rsi6, X, w, total}=chartState;
+  const dpr=window.devicePixelRatio||1;
+  const rw=cv.clientWidth, rh=cv.clientHeight;
+  cv.width=rw*dpr; cv.height=rh*dpr;
+  const ctx=cv.getContext('2d'); ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,rw,rh);
+  const RX=i=>40+i/(total-1)*(rw-50);
+  const RY=v=>rh-16-(v/100)*(rh-24);
+  chartState.RX=RX; chartState.RY=RY; chartState.rw=rw; chartState.rh=rh;
+  // 20/50/80 参考线
+  ctx.font='10px sans-serif';
+  [[80,'#f4b8c0'],[50,'#e3e8ef'],[20,'#a3e4c4']].forEach(([v,c])=>{
+    ctx.strokeStyle=c; ctx.setLineDash(v===50?[2,3]:[4,3]); ctx.beginPath();
+    ctx.moveTo(40,RY(v)); ctx.lineTo(rw,RY(v)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle='#8a94a6'; ctx.fillText(v, 2, RY(v)+3);
+  });
+  // RSI6 曲线(橙)
+  ctx.strokeStyle='#f2994a'; ctx.lineWidth=1.5; ctx.beginPath(); let st=false;
+  rsi6.forEach((v,i)=>{ if(v==null) return; if(!st){ ctx.moveTo(RX(i),RY(v)); st=true; } else ctx.lineTo(RX(i),RY(v)); });
+  ctx.stroke();
+  // 当前值标注
+  const lastV=[...rsi6].reverse().find(v=>v!=null);
+  if(lastV!=null){
+    ctx.fillStyle='#f2994a'; ctx.font='11px sans-serif'; ctx.textAlign='right';
+    ctx.fillText('RSI6 '+lastV.toFixed(1), rw-4, 14); ctx.textAlign='left';
+  }
+}
+// 十字光标 + tooltip
+function bindCrosshair(){
+  const chart=document.getElementById('chart');
+  const rsi=document.getElementById('rsiChart');
+  const tip=document.getElementById('tooltip');
+  function handle(e, cv){
+    if(!chartState || !chartState.ticks.length){ tip.style.display='none'; return; }
+    const rect=cv.getBoundingClientRect();
+    const mx=(e.touches?e.touches[0].clientX:e.clientX)-rect.left;
+    const {ticks, prices, avgs, ma5, ma10, rsi6, total}=chartState;
+    // 反推最接近的数据索引
+    const i=Math.round((mx-40)/((chartState.w-50))*(total-1));
+    if(i<0 || i>=ticks.length){ tip.style.display='none'; redraw(); return; }
+    redraw(i);
+    const t=ticks[i];
+    let html='<b>'+t.t+'</b><br>价 '+t.price.toFixed(2)+'　均价 '+t.avg.toFixed(2);
+    if(ma5[i]!=null) html+='<br>MA5 '+ma5[i].toFixed(2);
+    if(ma10[i]!=null) html+='<br>MA10 '+ma10[i].toFixed(2);
+    if(rsi6[i]!=null) html+='<br>RSI6 '+rsi6[i].toFixed(1);
+    tip.innerHTML=html;
+    tip.style.display='block';
+    // 定位(避免超出右边界)
+    const panel=cv.parentElement.getBoundingClientRect();
+    let left=(e.touches?e.touches[0].clientX:e.clientX)-panel.left+14;
+    if(left+140>panel.width) left-=160;
+    tip.style.left=left+'px';
+    tip.style.top=((e.touches?e.touches[0].clientY:e.clientY)-panel.top+10)+'px';
+  }
+  function redraw(idx){
+    // 重绘主图与RSI, 再叠加竖线
+    if(!chartState) return;
+    drawChart(chartState.ticks, chartState.pc);
+    if(idx==null) return;
+    const {X, total}=chartState;
+    const px=X(idx);
+    // 主图竖线
+    const c1=document.getElementById('chart').getContext('2d');
+    c1.strokeStyle='#94a3b8'; c1.setLineDash([3,3]); c1.lineWidth=1;
+    c1.beginPath(); c1.moveTo(px, 4); c1.lineTo(px, chartState.h-24); c1.stroke(); c1.setLineDash([]);
+    // 主图价格点
+    const {Y, prices}=chartState;
+    if(prices[idx]!=null){ c1.fillStyle='#e0475b'; c1.beginPath(); c1.arc(px,Y(prices[idx]),3,0,7); c1.fill(); }
+    // RSI竖线
+    const c2=document.getElementById('rsiChart').getContext('2d');
+    const rx=chartState.RX(idx);
+    c2.strokeStyle='#94a3b8'; c2.setLineDash([3,3]); c2.lineWidth=1;
+    c2.beginPath(); c2.moveTo(rx,2); c2.lineTo(rx,chartState.rh-16); c2.stroke(); c2.setLineDash([]);
+    if(chartState.rsi6[idx]!=null){ c2.fillStyle='#f2994a'; c2.beginPath(); c2.arc(rx,chartState.RY(chartState.rsi6[idx]),3,0,7); c2.fill(); }
+  }
+  [chart,rsi].forEach(cv=>{
+    cv.addEventListener('mousemove', e=>handle(e,cv));
+    cv.addEventListener('touchstart', e=>handle(e,cv));
+    cv.addEventListener('touchmove', e=>{ handle(e,cv); e.preventDefault(); }, {passive:false});
+    cv.addEventListener('mouseleave', ()=>{ tip.style.display='none'; redraw(); });
+    cv.addEventListener('touchend', ()=>{ tip.style.display='none'; redraw(); });
+  });
+}
+async function update(){
+  document.getElementById('updtime').textContent='刷新中…';
+  try{
+    const raw = await loadQuote();
+    if(!raw){ document.getElementById('updtime').textContent='行情获取失败(可能休市或网络限制)'; return; }
+    const p = raw.split('~');
+    const price=parseFloat(p[3]), pc=parseFloat(p[4]), chg=parseFloat(p[32]);
+    const hi=parseFloat(p[33]), lo=parseFloat(p[34]), avg=parseFloat(p[51]);
+    const t=p[30];
+    const cls = chg>0?'up':(chg<0?'down':'flat');
+    const ce = document.getElementById('price'); ce.textContent=fmt(price); ce.className='val '+cls;
+    if(lastPrice!==null && price!==lastPrice){ ce.classList.add('flash'); setTimeout(()=>ce.classList.remove('flash'),600); }
+    lastPrice=price;
+    // 同步更新左侧列表当前股票价格
+    listQuotes[CODE]={price, chg}; updateListPrices();
+    const che=document.getElementById('chg'); che.textContent=(chg>0?'+':'')+chg.toFixed(2)+'%'; che.className='val '+cls;
+    document.getElementById('avg').textContent=fmt(avg);
+    const dev=price-avg;
+    const de=document.getElementById('dev'); de.textContent=(dev>=0?'强 +':'弱 ')+fmt(dev); de.className='val '+(dev>=0?'up':'down');
+    document.getElementById('hl').innerHTML='<span class="up">'+fmt(hi)+'</span> / <span class="down">'+fmt(lo)+'</span>';
+    document.getElementById('vol').textContent=(p[49]||'—')+' / '+(p[38]||'—')+'%';
+    // 信号
+    const sg=strategy(price,avg,hi,lo,chg);
+    const se=document.getElementById('signal'); se.className='signal '+sg.cls; se.innerHTML=sg.txt;
+    document.getElementById('levels').innerHTML=
+      '<div>🔴 压力 '+fmt(hi)+'</div><div>⚖️ 均价 '+fmt(avg)+'</div><div>🟢 支撑 '+fmt(lo)+'</div><div>昨收 '+fmt(pc)+'</div>';
+    document.getElementById('lvR').textContent=fmt(hi);
+    document.getElementById('lvA').textContent=fmt(avg);
+    document.getElementById('lvS').textContent=fmt(lo);
+    // 盘口
+    let asks='',bids='';
+    for(let i=5;i>=1;i--){ asks+='<div class="row"><span class="down">卖'+i+' '+p[18+ (i-1)*2 +1 -0]+'</span></div>'; }
+    // 正确解析: 买盘 p[9..18], 卖盘 p[19..28]
+    bids=''; asks='';
+    for(let i=1;i<=5;i++){ const pr=p[9+(i-1)*2], q=p[10+(i-1)*2]; bids+='<div class="row"><span>买'+i+'</span><span>'+pr+'</span><span>'+q+'</span></div>'; }
+    for(let i=5;i>=1;i--){ const pr=p[19+(i-1)*2], q=p[20+(i-1)*2]; asks+='<div class="row"><span>卖'+i+'</span><span>'+pr+'</span><span>'+q+'</span></div>'; }
+    document.getElementById('bids').innerHTML=bids;
+    document.getElementById('asks').innerHTML=asks;
+    // 分时图: 拉取整日完整分时
+    const ticks=await loadMinute();
+    if(ticks && ticks.length){ drawChart(ticks, pc); }
+    else { drawChart([], pc); }
+    const tf = t.length>=14 ? t.slice(0,4)+'-'+t.slice(4,6)+'-'+t.slice(6,8)+' '+t.slice(8,10)+':'+t.slice(10,12)+':'+t.slice(12,14) : t;
+    document.getElementById('updtime').textContent='更新: '+tf+'（数据源:腾讯行情）';
+  }catch(e){
+    document.getElementById('updtime').textContent='刷新异常: '+e;
+  }
+}
+document.getElementById('btnRefresh').onclick=update;
+document.getElementById('btnAuto').onclick=function(){
+  auto=!auto; this.textContent='自动刷新: '+(auto?'开(每5秒)':'关'); this.className=auto?'on':'';
+  if(auto){ timer=setInterval(update,5000); } else { clearInterval(timer); }
+};
+// 添加自选股
+document.getElementById('btnAdd').onclick=addStock;
+document.getElementById('addInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addStock(); });
+// 初始化
+const initStock=watchList.find(x=>x.code===CODE)||watchList[0];
+CODE=initStock.code;
+document.getElementById('mainTitle').textContent=initStock.name+' · TradingAgents 做T盯盘';
+renderList();
+refreshList();
+bindCrosshair();
+update();
+timer=setInterval(update,5000);
+setInterval(refreshList, 8000);  // 列表价格每8秒刷新
+</script>
+</body>
+</html>
