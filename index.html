@@ -257,12 +257,10 @@
   <div class="panel" id="syncPanel">
     <h2>☁️ 自选云同步</h2>
     <div class="sync-row">
-      <input id="ghTokenInp" type="password" placeholder="默认已开启, 可填自己的GitHub token" autocomplete="off" />
-      <button id="btnSaveToken">保存并同步</button>
       <button id="btnSyncNow">立即同步</button>
+      <span class="sync-status">状态: <span id="syncStatus">未配置</span></span>
     </div>
-    <div class="sync-status">状态: <span id="syncStatus">未配置</span></div>
-    <div class="sync-tip">默认已开启云同步，手机/电脑打开即自动互通自选。如需用自己的账户，填入 GitHub token(<a href="https://github.com/settings/tokens/new?scopes=gist&description=stock-monitor" target="_blank">点此创建</a>, 勾选 gist 权限)。token 仅存本地浏览器。</div>
+    <div class="sync-tip">已开启自动同步，手机/电脑打开即自动互通自选，无需操作。</div>
   </div>
 
   <div class="grid" id="metricGrid">
@@ -1254,18 +1252,9 @@ function schedulePush(){
 
 // UI 绑定
 (function(){
-  const tokenInp=document.getElementById('ghTokenInp');
-  const saveBtn=document.getElementById('btnSaveToken');
   const syncBtn=document.getElementById('btnSyncNow');
-  const custom=localStorage.getItem('gh_token');
-  if(tokenInp) tokenInp.value = custom? '••••••••'+custom.slice(-4) : '';
-  if(saveBtn) saveBtn.onclick=async()=>{
-    const v=tokenInp.value.trim();
-    if(v && v.indexOf('••••')<0){ localStorage.setItem('gh_token', v); tokenInp.value='••••••••'+v.slice(-4); }
-    await syncPull();
-  };
   if(syncBtn) syncBtn.onclick=syncPull;
-  setSyncStatus(custom? '已配置(自定义账户)' : '默认账户已开启同步');
+  setSyncStatus('自动同步已开启');
 })();
 
 // 页面加载后自动拉取(不阻塞行情)
