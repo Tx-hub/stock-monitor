@@ -537,8 +537,8 @@ async function refreshPool(){
   for(const s of all){
     const raw=await fetchQuote(s.code);
     if(raw){ const p=raw.split('~');
-      const price=parseFloat(p[3]), pc=parseFloat(p[2]||p[4]), hi=parseFloat(p[33]||p[4]), lo=parseFloat(p[34]||p[5]);
-      const amp = pc? (hi-lo)/pc*100 : null;
+      const price=parseFloat(p[3]), pc=parseFloat(p[4]), hi=parseFloat(p[33]), lo=parseFloat(p[34]);
+      const amp = (pc && hi && lo)? (hi-lo)/pc*100 : null;
       poolQuotes[s.code]={...(poolQuotes[s.code]||{}), price, chg:parseFloat(p[32]), amp};
     }
     const prices=await loadMinuteByCode(s.code);
