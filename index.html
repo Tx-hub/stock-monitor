@@ -108,6 +108,8 @@
   /* ============ 手机端 (≤768px): 决策驾驶舱 ============ */
   @media (max-width:768px){
     body { padding:0 0 64px 0; background:#f5f7fa; }
+    /* iOS聚焦input字号<16px会自动缩放页面, 手机端提到16px规避 */
+    .sidebar .add-box input { font-size:16px; padding:7px 8px; }
     .layout { flex-direction:column; gap:0; max-width:100%; }
     /* 侧边栏(自选/股票池)默认隐藏, 由视图切换控制 */
     .sidebar { width:100%; position:static; border-radius:0; border:none; box-shadow:none; padding:10px 10px 4px; display:none; }
