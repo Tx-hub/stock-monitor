@@ -78,6 +78,8 @@
   .panel h2 { font-size:14px; margin-bottom:8px; color:#3b82c4; }
   #chart { width:100%; height:220px; display:block; background:#fbfcfe; border-radius:6px; border:1px solid #eef1f5; }
   #rsiChart { width:100%; height:100px; display:block; background:#fbfcfe; border-radius:6px; border:1px solid #eef1f5; }
+  #kchart { width:100%; height:200px; display:block; background:#fbfcfe; border-radius:6px; border:1px solid #eef1f5; }
+  #kvol { width:100%; height:80px; display:block; background:#fbfcfe; border-radius:6px; border:1px solid #eef1f5; margin-top:4px; }
   #tooltip { position:absolute; pointer-events:none; background:rgba(255,255,255,.97); border:1px solid #d5dce6; border-radius:6px; padding:8px 10px; font-size:12px; color:#2c3e50; box-shadow:0 2px 8px rgba(60,80,120,.15); display:none; z-index:10; line-height:1.6; white-space:nowrap; }
   #tooltip b { color:#1a2733; }
   .signal { padding:12px; border-radius:8px; font-size:15px; font-weight:600; margin-bottom:8px; line-height:1.6; }
@@ -337,6 +339,13 @@
     <div id="tooltip"></div>
   </div>
 
+  <div class="panel" id="kPanel">
+    <h2>日K线（蓝=MA5 · 紫=MA10 · 橙=MA20 · 红涨绿跌）</h2>
+    <canvas id="kchart"></canvas>
+    <h2 style="margin-top:8px">成交量</h2>
+    <canvas id="kvol"></canvas>
+  </div>
+
   <div class="panel collapsible" id="bookPanel">
     <h2 class="collap-head">五档盘口 <span class="collap-arrow">▾</span></h2>
     <div class="collap-body">
@@ -483,7 +492,7 @@ function updateListPrices(){
 function switchStock(code){
   if(code===CODE) return;
   CODE=code;
-  lastPrice=null; chartState=null; lastTicks=null;
+  lastPrice=null; chartState=null; lastTicks=null; kBars=null; window.__kLast=0;
   let s=watchList.find(x=>x.code===code);
   if(s){ swipeList=watchList; }  // 来自自选: 滑动在自选列表内切
   else{ for(const g of STOCK_POOL){ const f=g.items.find(x=>x.code===code); if(f){ s=f; swipeList=STOCK_POOL.flatMap(g=>g.items); break; } } }
@@ -1094,9 +1103,67 @@ function strategy(price, avg, hi, lo, chg){
   return {cls,txt,dev};
 }
 
-function drawChart(ticks, pc){
-  const cv=document.getElementById('chart');
+// ===== 日K线 + 成交量 =====
+let kBars=null;
+function maSeries(arr,m){ const r=new Array(arr.length).fill(null); for(let i=m-1;i<arr.length;i++){ let s=0; for(let k=0;k<m;k++)s+=arr[i-k]; r[i]=s/m; } return r; }
+async function loadKChart(){
+  const code=CODE;
+  try{
+    const bars=await jiyinKlineN(code, 60);   // 腾讯前复权60根
+    if(!bars || !bars.length){ kBars=null; drawKChart([]); return; }
+    const raw=await fetchQuote(code);          // 补当日实时(收盘前日线未更新)
+    if(raw){ const p=raw.split('~'); const ymd=new Date().toISOString().slice(0,10);
+      const o=parseFloat(p[5]),c=parseFloat(p[3]),hi=parseFloat(p[33]),lo=parseFloat(p[34]),v=parseFloat(p[6]);
+      if(c>0 && o>0){
+        if(bars[bars.length-1].t.slice(0,10)===ymd) bars[bars.length-1]={t:ymd,o,c,h:hi||c,l:lo||c,v:v||0};
+        else bars.push({t:ymd,o,c,h:hi||c,l:lo||c,v:v||0});
+      }
+    }
+    if(code!==CODE) return;  // 已切股, 丢弃
+    kBars=bars; drawKChart(bars);
+  }catch(e){ kBars=null; drawKChart([]); }
+}
+function drawKChart(bars){
   const dpr=window.devicePixelRatio||1;
+  const cv=document.getElementById('kchart'), vv=document.getElementById('kvol');
+  const w=cv.clientWidth, h=cv.clientHeight; cv.width=w*dpr; cv.height=h*dpr;
+  const vw=vv.clientWidth, vh=vv.clientHeight; vv.width=vw*dpr; vv.height=vh*dpr;
+  const ctx=cv.getContext('2d'); ctx.scale(dpr,dpr); ctx.clearRect(0,0,w,h);
+  const vctx=vv.getContext('2d'); vctx.scale(dpr,dpr); vctx.clearRect(0,0,vw,vh);
+  if(!bars || !bars.length){
+    ctx.fillStyle='#8a94a6'; ctx.font='13px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('暂无日K数据', w/2, h/2); ctx.textAlign='left'; return;
+  }
+  const n=bars.length, C=bars.map(b=>b.c), VV=bars.map(b=>b.v);
+  const ma5=maSeries(C,5), ma10=maSeries(C,10), ma20=maSeries(C,20);
+  let mn=1e18,mx=-1e18;
+  bars.forEach(b=>{ mn=Math.min(mn,b.l); mx=Math.max(mx,b.h); });
+  [ma5,ma10,ma20].forEach(a=>a.forEach(v=>{ if(v!=null){mn=Math.min(mn,v);mx=Math.max(mx,v);} }));
+  const padT=8,padB=6,padL=42;
+  const X=i=> padL + (w-padL-4)*(n<=1?0.5:i/(n-1));
+  const Y=v=> h-padB - (v-mn)/((mx-mn)||1)*(h-padT-padB);
+  const cw=Math.max(2,(w-padL-4)/n*0.62);
+  ctx.strokeStyle='#eef1f5'; ctx.fillStyle='#8a94a6'; ctx.font='10px sans-serif';
+  for(let k=0;k<=4;k++){ const val=mn+(mx-mn)*k/4, y=Y(val);
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(w,y); ctx.stroke(); ctx.fillText(val.toFixed(2),2,y+3); }
+  bars.forEach((b,i)=>{
+    const x=X(i), up=b.c>=b.o, col=up?'#e0475b':'#1aae6f';
+    ctx.strokeStyle=col; ctx.fillStyle=col;
+    ctx.beginPath(); ctx.moveTo(x,Y(b.h)); ctx.lineTo(x,Y(b.l)); ctx.stroke();
+    const yo=Y(b.o), yc=Y(b.c), top=Math.min(yo,yc); let bh=Math.abs(yc-yo); if(bh<1)bh=1;
+    ctx.fillRect(x-cw/2, top, cw, bh);
+  });
+  const drawMA=(arr,color)=>{ ctx.strokeStyle=color; ctx.lineWidth=1; ctx.beginPath(); let st=false;
+    arr.forEach((v,i)=>{ if(v==null)return; const x=X(i),y=Y(v); if(!st){ctx.moveTo(x,y);st=true;}else ctx.lineTo(x,y); }); ctx.stroke(); };
+  drawMA(ma5,'#3b82c4'); drawMA(ma10,'#8b5cf6'); drawMA(ma20,'#f59e0b');
+  const vmax=Math.max(...VV,1);
+  bars.forEach((b,i)=>{ const x=X(i), up=b.c>=b.o; vctx.fillStyle=up?'#e0475b':'#1aae6f';
+    const bh=(b.v/vmax)*(vh-4); vctx.fillRect(x-cw/2, vh-bh, cw, bh); });
+}
+
+function drawChart(ticks, pc){
+  const dpr=window.devicePixelRatio||1;
+  const cv=document.getElementById('chart');
   const w=cv.clientWidth, h=cv.clientHeight;
   cv.width=w*dpr; cv.height=h*dpr;
   const ctx=cv.getContext('2d'); ctx.scale(dpr,dpr);
@@ -1322,6 +1389,8 @@ async function update(){
     if(ticks && ticks.length){ lastTicks=ticks; drawChart(ticks, pc); }
     else if(lastTicks && lastTicks.length){ drawChart(lastTicks, pc); }  // 接口抖动/休市: 保留上次分时, 不清空
     else { drawChart([], pc); }
+    // 日K线(30秒节流, 避免每次刷新都拉60根)
+    if(!window.__kLast || Date.now()-window.__kLast>30000){ window.__kLast=Date.now(); loadKChart(); }
     // 回填当前股RSI6到左侧列表(即时更新, 不等列表轮询)
     if(chartState && chartState.rsi6){
       const lastR=[...chartState.rsi6].reverse().find(v=>v!=null);
