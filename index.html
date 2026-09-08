@@ -22,9 +22,11 @@
   .pool-src { display:flex; gap:6px; margin-bottom:8px; }
   .src-btn { flex:1; padding:6px 0; font-size:12px; font-weight:600; background:#f5f7fa; border:1px solid #e3e8ef; border-radius:6px; color:#8a94a6; cursor:pointer; }
   .src-btn.active { background:#3b82c4; border-color:#3b82c4; color:#fff; }
-  .stg-tabs { display:flex; gap:4px; margin-bottom:8px; }
-  .stg-btn { flex:1; padding:5px 0; font-size:11px; background:#f5f7fa; border:1px solid #e3e8ef; border-radius:6px; color:#8a94a6; cursor:pointer; }
+  .stg-tabs { display:flex; gap:4px; margin-bottom:8px; flex-wrap:wrap; }
+  .stg-btn { flex:1; min-width:60px; padding:5px 0; font-size:11px; background:#f5f7fa; border:1px solid #e3e8ef; border-radius:6px; color:#8a94a6; cursor:pointer; }
   .stg-btn.active { background:#eaf2fb; border-color:#bcd7f2; color:#3b82c4; font-weight:600; }
+  .lt-brain { cursor:pointer; font-size:13px; }
+  .lt-grok { background:#f8f9fc; border:1px solid #e3e8ef; border-radius:6px; padding:8px 10px; margin:2px 0 6px; font-size:12.5px; line-height:1.7; color:#2c3e50; white-space:pre-wrap; }
   .jiyin-ctrl { display:flex; gap:6px; margin-bottom:6px; }
   #btnJiyinScan { flex:1; background:#3b82c4; color:#fff; border-color:#3b82c4; font-weight:600; padding:7px 0; }
   #btnJiyinStop { background:#e0475b; color:#fff; border-color:#e0475b; }
@@ -267,6 +269,7 @@
           <button class="stg-btn active" data-stg="jiyin">极阴尾排</button>
           <button class="stg-btn" data-stg="longtou">龙头回踩</button>
           <button class="stg-btn" data-stg="fanbao">反包</button>
+          <button class="stg-btn" data-stg="ltprob">龙头概率</button>
         </div>
         <div class="pool-tip" id="stgTip">极阴尾排 · 扫全市场主板 · 得分降序 · Top1为当日票 · 仅供参考不构成投资建议</div>
         <div class="jiyin-ctrl">
@@ -798,11 +801,103 @@ async function fanbaoEval(bars, code, name){
   return { code, name, close:+now.toFixed(2), chg:+(chg||0).toFixed(2), score:height, extra:'连板'+height+' 线'+bodyHigh.toFixed(2) };
 }
 
+// ==================== 龙头概率 (东财涨停池打分) ====================
+let ltEnv=null;  // 当日环境 {zt,dt,maxLb,coef,phase}
+// 东财 m(0深/1沪)+c -> sz/sh代码
+function emCode(m, c){ return (m==='1'||m===1?'sh':'sz')+c; }
+// 拉当日涨停池
+async function fetchZTPool(){
+  const today=new Date().toISOString().slice(0,10).replace(/-/g,'');
+  const url='https://push2ex.eastmoney.com/getTopicZTPool?ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztzt&Pageindex=0&pagesize=400&sort=fbt%3Aasc&date='+today+'&_='+Date.now();
+  const r=await fetch(url); const d=await r.json();
+  return (d.data&&d.data.pool)||[];
+}
+// 拉当日跌停家数(环境用)
+async function fetchDTCount(){
+  try{
+    const today=new Date().toISOString().slice(0,10).replace(/-/g,'');
+    const r=await fetch('https://push2ex.eastmoney.com/getTopicDTPool?ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.dtzt&Pageindex=0&pagesize=400&sort=fund%3Aasc&date='+today+'&_='+Date.now());
+    const d=await r.json(); return ((d.data&&d.data.pool)||[]).length;
+  }catch(e){ return 0; }
+}
+// 各维度打分(0-10)
+function scTime(fbt){ if(fbt<=92500)return 10; if(fbt<=100000)return 8; if(fbt<=113000)return 5; if(fbt<=143000)return 2; return 1; }
+function scPos(rankInBk){ if(rankInBk===0)return 10; if(rankInBk<3)return 6; return 2; }
+function scTheme(bkCount){ if(bkCount>=8)return 10; if(bkCount>=4)return 6; if(bkCount>=2)return 4; return 1; }
+function scSeal(zbc, fundRatio){ // 炸板+封单/流通盘
+  let base = zbc===0?10 : (zbc===1?6:2);
+  if(zbc===0 && fundRatio<0.01) base=7;  // 0炸但封单弱, 略降
+  return base;
+}
+function scSize(ltszYi){ if(ltszYi>=20&&ltszYi<=80)return 10; if(ltszYi<20||(ltszYi>80&&ltszYi<=150))return 6; if(ltszYi<=200)return 4; return 2; }
+function scTurn(hs, ltszYi){ // 换手健康区间按盘子分档
+  const lo = ltszYi<50?5:(ltszYi<150?3:1.5);
+  const hi = ltszYi<50?25:(ltszYi<150?15:8);
+  return (hs>=lo && hs<=hi)?10:4;
+}
+// 走势: 是否创60日新高(用日线), 0-10
+async function scTrend(code){
+  try{ const bars=await jiyinKlineN(code,60); if(!bars||bars.length<20) return 5;
+    const highs=bars.map(b=>b.h), last=bars[bars.length-1].c;
+    const mx=Math.max(...highs.slice(0,-1));
+    if(last>=mx) return 10;            // 创新高
+    if(last>=mx*0.95) return 5;        // 接近高点
+    return 2;
+  }catch(e){ return 5; }
+}
+// 环境系数
+function calcEnv(pool, dtCount){
+  const zt=pool.length, maxLb=pool.reduce((m,s)=>Math.max(m,s.lbc||1),0);
+  const lbGe2=pool.filter(s=>(s.lbc||1)>=2).length;
+  let coef,phase;
+  if(maxLb>=5 && zt>60){ coef=1.15; phase='高潮期'; }
+  else if(zt>=40){ coef=1.0; phase='升温/修复'; }
+  else if(zt>=20){ coef=0.85; phase='降温期'; }
+  else { coef=0.65; phase='退潮/冰点'; }
+  if(dtCount>zt*0.5 && dtCount>10){ coef=Math.min(coef,0.65); phase='退潮(跌停多)'; }
+  return { zt, dt:dtCount, maxLb, lbGe2, coef, phase };
+}
+// 主流程: 拉池 -> 打分 -> 排序
+async function ltprobRun(onProgress, isAbort){
+  const pool=await fetchZTPool();
+  if(!pool.length) throw new Error('涨停池为空(可能非交易日或接口变动)');
+  const dtCount=await fetchDTCount();
+  ltEnv=calcEnv(pool, dtCount);
+  // 板块分组: 家数 + 板块内fbt排序
+  const bkCount={}, bkList={};
+  pool.forEach(s=>{ const b=s.hybk||'其他'; bkCount[b]=(bkCount[b]||0)+1; (bkList[b]=bkList[b]||[]).push(s); });
+  Object.values(bkList).forEach(arr=>arr.sort((a,b)=>a.fbt-b.fbt));
+  const W={t:0.182,pos:0.182,theme:0.136,seal:0.136,size:0.091,trend:0.091,turn:0.091};
+  const out=[]; let done=0;
+  for(let i=0;i<pool.length;i++){
+    if(isAbort && isAbort()) break;
+    const s=pool[i];
+    const code=emCode(s.m, s.c), bk=s.hybk||'其他';
+    const ltszYi=(s.ltsz||0)/1e8;
+    const rankInBk=(bkList[bk]||[]).findIndex(x=>x.c===s.c);
+    const fundRatio=(s.ltsz>0)?(s.fund/s.ltsz):0;
+    const sc={ t:scTime(s.fbt), pos:scPos(rankInBk), theme:scTheme(bkCount[bk]),
+      seal:scSeal(s.zbc||0, fundRatio), size:scSize(ltszYi), turn:scTurn(s.hs||0, ltszYi),
+      trend: await scTrend(code) };
+    const base = W.t*sc.t + W.pos*sc.pos + W.theme*sc.theme + W.seal*sc.seal + W.size*sc.size + W.trend*sc.trend + W.turn*sc.turn;
+    const score = +(base*ltEnv.coef).toFixed(2);
+    const fbtStr = String(s.fbt).padStart(6,'0').replace(/(\d\d)(\d\d)(\d\d)/,'$1:$2');
+    out.push({ code, name:s.n, close:+(s.p/1000).toFixed(2), chg:+(s.zdp||0).toFixed(2), score,
+      lbc:s.lbc||1, fbt:fbtStr, zbc:s.zbc||0, bk, hs:+(s.hs||0).toFixed(1), ltsz:+ltszYi.toFixed(0),
+      sc, rankInBk });
+    done++; if(onProgress) onProgress(done, pool.length, out.length);
+    if(i%8===7) await new Promise(r=>setTimeout(r,80));
+  }
+  out.sort((a,b)=>b.score-a.score);
+  return out;
+}
+
 // 策略配置
 const STRATS={
   jiyin:  { label:'极阴尾排 · 扫全市场主板 · 得分降序 · Top1为当日票', bars:400, attach:true,  scoreName:'分', evalSync:jiyinEval },
   longtou:{ label:'龙头回踩 · 主线龙头回踩MA10缩量企稳 · 按60日涨幅降序', bars:120, attach:true,  scoreName:'涨', evalSync:longtouEval },
   fanbao: { label:'反包 · 断板后现价站上反包线 · 按连板高度降序', bars:520, attach:false, scoreName:'板', evalAsync:fanbaoEval },
+  ltprob: { label:'龙头概率 · 涨停池6维打分×环境系数 · 得分降序', mode:'ztpool', scoreName:'龙' },
 };
 let curStrat='jiyin';
 
@@ -847,6 +942,21 @@ async function jiyinScan(){
   document.getElementById('btnJiyinStop').style.display='';
   document.getElementById('jiyinList').innerHTML='';
   try{
+    // 龙头概率: 走涨停池打分, 不扫全市场
+    if(cfg.mode==='ztpool'){
+      jiyinSetStatus('拉取当日涨停池…');
+      jiyinResults=await ltprobRun(
+        (done,total,hit)=>jiyinSetStatus('打分中 '+done+'/'+total+'…'),
+        ()=>jiyinAbort
+      );
+      jiyinRender();
+      if(!jiyinAbort){
+        const e=ltEnv;
+        jiyinSetStatus('完成！涨停'+e.zt+' 跌停'+e.dt+' 最高'+e.maxLb+'板 · '+e.phase+'(系数'+e.coef+') · 命中'+jiyinResults.length+'只');
+        saveStratResult('ltprob', jiyinResults);
+      }
+      return;
+    }
     jiyinSetStatus('拉取全市场主板列表…');
     const uni=await jiyinUniverse();
     if(jiyinAbort){ jiyinSetStatus('已停止'); return; }
@@ -903,14 +1013,37 @@ function jiyinRender(){
     const inW=watchList.some(x=>x.code===s.code);
     const cls=s.chg>0?'up':(s.chg<0?'down':'flat');
     const scoreTxt = cfg.scoreName+(''+s.score);
-    div.innerHTML=
-      '<div><div class="pi-name">'+(idx+1)+'. '+s.name+'</div><div class="pi-code">'+s.code.toUpperCase()+'</div></div>'+
-      '<div class="pi-right"><div class="pi-price '+cls+'">'+s.close.toFixed(2)+'</div><div class="pi-sub '+cls+'">'+(s.chg>0?'+':'')+s.chg.toFixed(2)+'% <span class="pi-score">'+scoreTxt+'</span></div></div>'+
-      '<span class="pi-add'+(inW?' added':'')+'">'+(inW?'✓':'＋')+'</span>';
-    div.addEventListener('click', e=>{ if(e.target.classList.contains('pi-add'))return; switchStock(s.code); });
+    if(curStrat==='ltprob'){
+      const sub2='连'+s.lbc+'板 · '+s.fbt+(s.zbc?' · 炸'+s.zbc:'')+' · '+s.bk;
+      div.innerHTML=
+        '<div style="flex:1;min-width:0"><div class="pi-name">'+(idx+1)+'. '+s.name+' <span class="lt-brain" title="AI定性">🧠</span></div><div class="pi-code">'+s.code.toUpperCase()+' · '+sub2+'</div></div>'+
+        '<div class="pi-right"><div class="pi-price '+cls+'">'+s.close.toFixed(2)+'</div><div class="pi-sub '+cls+'">'+(s.chg>0?'+':'')+s.chg.toFixed(2)+'% <span class="pi-score">'+scoreTxt+'</span></div></div>'+
+        '<span class="pi-add'+(inW?' added':'')+'">'+(inW?'✓':'＋')+'</span>';
+      div.querySelector('.lt-brain').addEventListener('click', e=>{ e.stopPropagation(); ltGrokAnalyze(s, div); });
+    } else {
+      div.innerHTML=
+        '<div><div class="pi-name">'+(idx+1)+'. '+s.name+'</div><div class="pi-code">'+s.code.toUpperCase()+'</div></div>'+
+        '<div class="pi-right"><div class="pi-price '+cls+'">'+s.close.toFixed(2)+'</div><div class="pi-sub '+cls+'">'+(s.chg>0?'+':'')+s.chg.toFixed(2)+'% <span class="pi-score">'+scoreTxt+'</span></div></div>'+
+        '<span class="pi-add'+(inW?' added':'')+'">'+(inW?'✓':'＋')+'</span>';
+    }
+    div.addEventListener('click', e=>{ if(e.target.classList.contains('pi-add')||e.target.classList.contains('lt-brain'))return; switchStock(s.code); });
     div.querySelector('.pi-add').addEventListener('click', e=>{ e.stopPropagation(); addFromPool(s); });
     box.appendChild(div);
   });
+}
+
+// 龙头概率: 单只 grok 定性分析(框架第三层)
+async function ltGrokAnalyze(s, rowDiv){
+  let panel=rowDiv.nextElementSibling;
+  if(panel && panel.classList.contains('lt-grok')){ panel.remove(); return; }  // 再点收起
+  panel=document.createElement('div'); panel.className='lt-grok'; panel.textContent='🧠 分析中…';
+  rowDiv.after(panel);
+  const md=`标的:${s.name}(${s.code.toUpperCase()}) 连板:${s.lbc} 首封:${s.fbt} 炸板:${s.zbc} 板块:${s.bk} 换手:${s.hs}% 流通市值:${s.ltsz}亿 龙头概率得分:${s.score}`;
+  const sys='你是资深游资打板交易员。基于给定涨停股信息, 按龙头战法定性维度简评: ①题材/主线属性与想象空间 ②板块地位与独立性 ③可能的事件催化 ④风险提示。每点1-2句, 150字内, 结尾提示仅供参考不构成投资建议。';
+  try{
+    panel.textContent='';
+    await callArkStream(sys, md, (delta)=>{ panel.textContent+=delta; });
+  }catch(e){ panel.textContent='分析失败: '+e.message; }
 }
 
 // 从缓存渲染当前策略结果(带日期+隔日提醒)
@@ -939,10 +1072,12 @@ document.querySelectorAll('.stg-btn').forEach(b=>b.addEventListener('click', ()=
   curStrat=b.dataset.stg;
   document.querySelectorAll('.stg-btn').forEach(x=>x.classList.toggle('active', x===b));
   document.getElementById('stgTip').textContent=STRATS[curStrat].label+' · 仅供参考不构成投资建议';
-  document.getElementById('btnJiyinScan').textContent='▶ 开始扫描全市场';
+  const isZt=STRATS[curStrat].mode==='ztpool';
+  const scanTxt=isZt?'▶ 拉取当日涨停池打分':'▶ 开始扫描全市场';
+  document.getElementById('btnJiyinScan').textContent=scanTxt;
   const cached=loadStrats()[curStrat];
-  if(cached && cached.list && cached.list.length){ stratRenderCached(); document.getElementById('btnJiyinScan').textContent='▶ 重新扫描'; }
-  else { document.getElementById('jiyinList').innerHTML=''; jiyinResults=[]; jiyinSetStatus('点击按钮开始（约1分钟，勿切走）'); }
+  if(cached && cached.list && cached.list.length){ stratRenderCached(); document.getElementById('btnJiyinScan').textContent=isZt?'▶ 重新拉取':'▶ 重新扫描'; }
+  else { document.getElementById('jiyinList').innerHTML=''; jiyinResults=[]; jiyinSetStatus(isZt?'点击拉取当日涨停池打分（数秒）':'点击按钮开始（约1分钟，勿切走）'); }
 }));
 document.getElementById('btnJiyinScan').onclick=jiyinScan;
 document.getElementById('btnJiyinStop').onclick=()=>{ jiyinAbort=true; jiyinSetStatus('正在停止…'); };
