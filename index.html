@@ -872,6 +872,7 @@ async function jiyinScan(){
     if(!jiyinAbort){
       if(jiyinResults.length){ const t1=jiyinResults[0]; jiyinSetStatus('完成！命中 '+jiyinResults.length+' 只。Top1: '+t1.name+' '+t1.code.toUpperCase()); }
       else jiyinSetStatus('完成，今日无满足该策略的个股');
+      saveStratResult(curStrat, jiyinResults);  // 保存结果到云端(隔日仍可看)
     }
   }catch(e){ jiyinSetStatus('扫描出错: '+e.message); }
   finally{
@@ -903,12 +904,25 @@ function jiyinRender(){
   });
 }
 
+// 从缓存渲染当前策略结果(带日期+隔日提醒)
+function stratRenderCached(){
+  const cached=loadStrats()[curStrat];
+  if(!cached || !cached.list){ jiyinResults=[]; document.getElementById('jiyinList').innerHTML=''; return; }
+  jiyinResults=cached.list;
+  jiyinRender();
+  const today=new Date().toISOString().slice(0,10);
+  const stale = cached.date!==today;
+  const dtip = '上次扫描 '+cached.date+(stale?' ⚠️非今日，建议重扫':'')+' · 命中'+cached.list.length+'只';
+  jiyinSetStatus(dtip);
+}
+
 // 来源切换
 document.querySelectorAll('.src-btn').forEach(b=>b.addEventListener('click', ()=>{
   const src=b.dataset.src;
   document.querySelectorAll('.src-btn').forEach(x=>x.classList.toggle('active', x===b));
   document.getElementById('poolEtf').style.display = src==='etf'?'':'none';
   document.getElementById('poolJiyin').style.display = src==='jiyin'?'':'none';
+  if(src==='jiyin') stratRenderCached();  // 进选股: 显示上次结果
 }));
 // 策略切换
 document.querySelectorAll('.stg-btn').forEach(b=>b.addEventListener('click', ()=>{
@@ -916,10 +930,10 @@ document.querySelectorAll('.stg-btn').forEach(b=>b.addEventListener('click', ()=
   curStrat=b.dataset.stg;
   document.querySelectorAll('.stg-btn').forEach(x=>x.classList.toggle('active', x===b));
   document.getElementById('stgTip').textContent=STRATS[curStrat].label+' · 仅供参考不构成投资建议';
-  document.getElementById('jiyinList').innerHTML='';
-  jiyinResults=[];
   document.getElementById('btnJiyinScan').textContent='▶ 开始扫描全市场';
-  jiyinSetStatus('点击按钮开始（约1分钟，勿切走）');
+  const cached=loadStrats()[curStrat];
+  if(cached && cached.list && cached.list.length){ stratRenderCached(); document.getElementById('btnJiyinScan').textContent='▶ 重新扫描'; }
+  else { document.getElementById('jiyinList').innerHTML=''; jiyinResults=[]; jiyinSetStatus('点击按钮开始（约1分钟，勿切走）'); }
 }));
 document.getElementById('btnJiyinScan').onclick=jiyinScan;
 document.getElementById('btnJiyinStop').onclick=()=>{ jiyinAbort=true; jiyinSetStatus('正在停止…'); };
@@ -1502,7 +1516,7 @@ async function syncPull(){
   if(syncing) return; syncing=true; setSyncStatus('同步中…');
   try{
     let id=gistId();
-    const payloadNow={ items:watchList, removed:loadRemoved(), ts:Date.now() };
+    const payloadNow={ items:watchList, removed:loadRemoved(), ts:Date.now(), strats:loadStrats() };
     if(!id){ await gistCreate(payloadNow); setSyncStatus('已同步 '+new Date().toLocaleTimeString()); syncing=false; return; }
     const remote=await gistRead(id);
     if(remote===null){ await gistCreate(payloadNow); setSyncStatus('已重建并同步'); syncing=false; return; }
@@ -1510,8 +1524,11 @@ async function syncPull(){
     if(merged.items.length){ watchList=merged.items; }
     saveRemoved(merged.removed);
     localStorage.setItem('watchlist', JSON.stringify(watchList));  // 直接存, 不触发push
+    // 合并选股结果: 云端更新则覆盖本地(按各策略ts取新)
+    mergeStrats(remote.strats);
     renderList(); refreshList();
-    await gistWrite(id, { items:watchList, removed:merged.removed, ts:Date.now() });
+    if(typeof stratRenderCached==='function') stratRenderCached();
+    await gistWrite(id, { items:watchList, removed:merged.removed, ts:Date.now(), strats:loadStrats() });
     setSyncStatus('已同步 '+new Date().toLocaleTimeString());
   }catch(e){ setSyncStatus('同步失败: '+e.message); }
   syncing=false;
@@ -1520,7 +1537,7 @@ async function syncPushNow(){
   if(!ghToken()) return;
   try{
     let id=gistId();
-    const payload={ items:watchList, removed:loadRemoved(), ts:Date.now() };
+    const payload={ items:watchList, removed:loadRemoved(), ts:Date.now(), strats:loadStrats() };
     if(!id){ await gistCreate(payload); } else { await gistWrite(id, payload); }
     setSyncStatus('已同步 '+new Date().toLocaleTimeString());
   }catch(e){ setSyncStatus('同步失败: '+e.message); }
@@ -1528,6 +1545,26 @@ async function syncPushNow(){
 function schedulePush(){
   if(!ghToken()||!gistId()) return;
   clearTimeout(pushTimer); pushTimer=setTimeout(syncPushNow, 800);
+}
+
+// ===== 选股策略结果 本地存储 + 云端合并 =====
+function loadStrats(){ try{ return JSON.parse(localStorage.getItem('strat_results'))||{}; }catch(e){ return {}; } }
+function saveStrats(obj){ localStorage.setItem('strat_results', JSON.stringify(obj)); }
+function saveStratResult(key, list){
+  const all=loadStrats();
+  all[key]={ date:new Date().toISOString().slice(0,10), ts:Date.now(), list };
+  saveStrats(all);
+  schedulePush();  // 结果变更, 推云端
+}
+// 合并云端选股结果(按各策略ts取更新的)
+function mergeStrats(remoteStrats){
+  if(!remoteStrats) return;
+  const local=loadStrats();
+  for(const k of Object.keys(remoteStrats)){
+    const r=remoteStrats[k], l=local[k];
+    if(!l || (r&&r.ts>(l.ts||0))) local[k]=r;
+  }
+  saveStrats(local);
 }
 
 // UI 绑定
