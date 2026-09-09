@@ -532,13 +532,17 @@ function fetchQuote(code){
 
 // 按代码拉分时(用于列表算RSI6)
 async function loadMinuteByCode(code){
-  try{
-    const r=await fetch('https://web.ifzq.gtimg.cn/appstock/app/minute/query?code='+code+'&r='+Date.now(),{cache:'no-store'});
-    const d=await r.json();
-    const node=d.data && d.data[code] && d.data[code].data && d.data[code].data.data;
-    if(!node) return null;
-    return node.map(line=>parseFloat(line.split(' ')[1]));
-  }catch(e){ return null; }
+  const hosts=['https://web.ifzq.gtimg.cn/appstock/app/minute/query','https://proxy.finance.qq.com/ifzqgtimg/appstock/app/minute/query'];
+  for(const host of hosts){
+    try{
+      const r=await fetch(host+'?code='+code+'&r='+Date.now(),{cache:'no-store'});
+      if(!r.ok) continue;
+      const d=await r.json();
+      const node=d.data && d.data[code] && d.data[code].data && d.data[code].data.data;
+      if(node && node.length) return node.map(line=>parseFloat(line.split(' ')[1]));
+    }catch(e){ /* 换下一个域 */ }
+  }
+  return null;
 }
 
 async function refreshList(){
@@ -926,12 +930,20 @@ async function jiyinUniverse(){
 }
 
 // 拉日线(指定根数)
+// 腾讯日线多域(主ifzq, 备proxy.finance.qq.com), 同格式同复权
+const KLINE_HOSTS=['https://web.ifzq.gtimg.cn/appstock/app/fqkline/get','https://proxy.finance.qq.com/ifzqgtimg/appstock/app/fqkline/get'];
 async function jiyinKlineN(code, count){
-  const r=await fetch('https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param='+code+',day,,,'+count+',qfq');
-  const d=await r.json();
-  const stk=d.data&&d.data[code]; if(!stk) return null;
-  const buf=stk.qfqday||stk.day; if(!buf||!buf.length) return null;
-  return buf.map(row=>({t:row[0],o:+row[1],c:+row[2],h:+row[3],l:+row[4],v:+row[5]}));
+  for(const host of KLINE_HOSTS){
+    try{
+      const r=await fetch(host+'?param='+code+',day,,,'+count+',qfq&_='+Date.now());
+      if(!r.ok) continue;
+      const d=await r.json();
+      const stk=d.data&&d.data[code]; if(!stk) continue;
+      const buf=stk.qfqday||stk.day; if(!buf||!buf.length) continue;
+      return buf.map(row=>({t:row[0],o:+row[1],c:+row[2],h:+row[3],l:+row[4],v:+row[5]}));
+    }catch(e){ /* 换下一个域 */ }
+  }
+  return null;
 }
 
 async function jiyinScan(){
@@ -1193,21 +1205,26 @@ function loadQuote(){
 }
 
 // 拉取完整分时数据(整日): 时间 价格 累计量 累计额 -> 均价=额/量/100
+const MINUTE_HOSTS=['https://web.ifzq.gtimg.cn/appstock/app/minute/query','https://proxy.finance.qq.com/ifzqgtimg/appstock/app/minute/query'];
+function parseMinute(node){
+  return node.map(line=>{
+    const s=line.split(' ');
+    const t=s[0], price=parseFloat(s[1]), vol=parseFloat(s[2]), amt=parseFloat(s[3]);
+    const avg = vol>0 ? amt/(vol*100) : price;
+    return { t:t.slice(0,2)+':'+t.slice(2), price, avg };
+  });
+}
 async function loadMinute(){
-  const url='https://web.ifzq.gtimg.cn/appstock/app/minute/query?code='+CODE+'&r='+Date.now();
-  try{
-    const r=await fetch(url,{cache:'no-store'});
-    const d=await r.json();
-    const node=d.data && d.data[CODE] && d.data[CODE].data && d.data[CODE].data.data;
-    if(!node) return null;
-    const ticks=node.map(line=>{
-      const s=line.split(' ');
-      const t=s[0], price=parseFloat(s[1]), vol=parseFloat(s[2]), amt=parseFloat(s[3]);
-      const avg = vol>0 ? amt/(vol*100) : price;
-      return { t:t.slice(0,2)+':'+t.slice(2), price, avg };
-    });
-    return ticks;
-  }catch(e){ return null; }
+  for(const host of MINUTE_HOSTS){
+    try{
+      const r=await fetch(host+'?code='+CODE+'&r='+Date.now(),{cache:'no-store'});
+      if(!r.ok) continue;
+      const d=await r.json();
+      const node=d.data && d.data[CODE] && d.data[CODE].data && d.data[CODE].data.data;
+      if(node && node.length) return parseMinute(node);
+    }catch(e){ /* 换下一个域 */ }
+  }
+  return null;
 }
 
 function fmt(n){ return Number(n).toFixed(2); }
