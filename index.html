@@ -329,7 +329,7 @@
 
   <div class="panel" id="analysisPanel">
     <h2>🧠 TradingAgents 多智能体深度分析</h2>
-    <div class="ana-hint" id="anaHint">点击上方「深度分析」，5位AI分析师（技术面·多头·空头·交易员·风控）将依次给出研判。</div>
+    <div class="ana-hint" id="anaHint">点击上方「深度分析」，5位AI分析师（技术面·多头·空头·交易员·风控）将依次研判，同时给出【做T】和【波段】两套建议(含持有周期)。</div>
     <div id="anaBody"></div>
     <div class="ana-disc">⚠️ 以上为AI生成的多智能体研判，仅供参考，不构成投资建议。市场有风险，决策需谨慎。</div>
   </div>
@@ -1606,6 +1606,19 @@ function collectMarketData(){
   for(let i=1;i<=5;i++){ book+='买'+i+' '+p[9+(i-1)*2]+'×'+p[10+(i-1)*2]+'  '; }
   book+='\n卖盘: ';
   for(let i=1;i<=5;i++){ book+='卖'+i+' '+p[19+(i-1)*2]+'×'+p[20+(i-1)*2]+'  '; }
+  // 日K级别数据(波段用): 近60日走势、均线、区间高低
+  let kSeg='(日K数据未加载)';
+  if(kBars && kBars.length>=20){
+    const C=kBars.map(b=>b.c), H=kBars.map(b=>b.h), L=kBars.map(b=>b.l);
+    const kMA=(m)=>{ if(C.length<m) return null; let s=0; for(let k=0;k<m;k++)s+=C[C.length-1-k]; return s/m; };
+    const hi60=Math.max(...H), lo60=Math.min(...L), last=C[C.length-1];
+    const posPct=((last-lo60)/((hi60-lo60)||1)*100).toFixed(0);
+    const km5=kMA(5),km10=kMA(10),km20=kMA(20);
+    // 采样约15个日K收盘点
+    const n=kBars.length, step=Math.max(1,Math.floor(n/15)), samp=[];
+    for(let i=0;i<n;i+=step){ samp.push(kBars[i].t.slice(5)+' '+kBars[i].c.toFixed(2)); }
+    kSeg=`近${n}日区间 高${hi60.toFixed(2)}/低${lo60.toFixed(2)}, 现价处于区间${posPct}%位置; 日线MA5=${km5?km5.toFixed(2):'—'} MA10=${km10?km10.toFixed(2):'—'} MA20=${km20?km20.toFixed(2):'—'}\n日K收盘采样: ${samp.join('; ')}`;
+  }
   return `【标的】${name}（${CODE.toUpperCase()}）
 【现价】${fmt(price)}　【昨收】${fmt(pc)}　【涨跌幅】${chg>0?'+':''}${chg.toFixed(2)}%
 【今高】${fmt(hi)}　【今低】${fmt(lo)}　【均价(VWAP)】${fmt(avg)}　【现价vs均价】${(price-avg>=0?'+':'')+fmt(price-avg)}
@@ -1613,21 +1626,22 @@ function collectMarketData(){
 【RSI6】${rsi6!=null?rsi6.toFixed(1):'—'}　【MA5】${ma5!=null?ma5.toFixed(2):'—'}　【MA10】${ma10!=null?ma10.toFixed(2):'—'}
 【五档盘口】\n${book}
 【今日分时走势采样】${sampleTicks(cs.ticks,20)}
+【日K级别(波段用)】${kSeg}
 【规则引擎信号】${sgTxt}`;
 }
 
 // 5个Agent角色定义(系统提示)
 const ANA_AGENTS = [
   { key:'tech', role:'📊 技术分析师', badge:'技术面', cls:'',
-    sys:'你是资深A股技术分析师。仅基于给定的盘面技术数据(量价、均价VWAP、RSI6、MA5/MA10、五档盘口、分时走势)做客观解读, 判断当前多空力量、支撑压力、量能情况。语言简洁专业, 200字内, 不要免责声明。' },
+    sys:'你是资深A股技术分析师。基于给定数据做客观解读, 分两个级别: (1)日内盘面(量价/均价VWAP/RSI6/五档/分时); (2)日K级别(近期区间位置/MA5-10-20多空排列/趋势阶段)。判断多空力量、支撑压力、量能。语言简洁专业, 220字内, 不要免责声明。' },
   { key:'bull', role:'🐂 多头研究员', badge:'看多', cls:'role-bull',
-    sys:'你是偏多头的研究员。基于技术分析师的结论和盘面数据, 找出支持做多/正T(先低吸后高抛)的理由与有利信号。给出你认为的低吸区间。150字内, 观点鲜明, 不要免责声明。' },
+    sys:'你是偏多头的研究员。基于技术面, 分别给出:(1)日内做T(正T)的低吸理由与区间;(2)波段做多的理由(趋势/位置/题材)与建仓区间。150字内, 观点鲜明, 不要免责声明。' },
   { key:'bear', role:'🐻 空头研究员', badge:'看空', cls:'role-bear',
-    sys:'你是偏空头的研究员。基于技术分析师的结论和盘面数据, 找出风险点与支持做空/倒T(先高抛后低吸)的理由。指出需警惕的破位位置。150字内, 观点鲜明, 不要免责声明。' },
+    sys:'你是偏空头的研究员。基于技术面, 分别指出:(1)日内做T的风险与倒T点;(2)波段层面的风险(趋势转弱/高位/破位)与需回避的信号。150字内, 观点鲜明, 不要免责声明。' },
   { key:'trader', role:'💼 交易员', badge:'决策', cls:'role-trader',
-    sys:'你是做T交易员。综合多空双方观点与盘面数据, 给出明确的日内做T方向(正T/倒T/观望)和具体可执行点位: 低吸价、减仓/高抛价、止损价。用要点列出, 150字内, 不要免责声明。' },
+    sys:'你是交易员。综合多空观点, 输出两套明确方案。\n【做T】日内方向(正T/倒T/观望)+低吸价/高抛价/止损价。\n【波段】方向(建仓/持有/观望/离场)+买入区间/目标位/止损位+预期持有周期(自判: 短波数天~2周 或 中波2周~数月, 说明依据)+离场信号。用要点列出, 220字内, 不要免责声明。' },
   { key:'risk', role:'🛡️ 风控', badge:'风控', cls:'role-risk',
-    sys:'你是风控。审查交易员方案的风险, 给出最终"可执行做T建议", 标注风险等级(低/中/高)和最大建议仓位比例。150字内。结尾用一句话提示"仅供参考,不构成投资建议"。' }
+    sys:'你是风控。审查交易员的两套方案, 分别给出【做T】和【波段】的最终可执行建议, 各标注风险等级(低/中/高)和建议仓位比例。180字内。结尾用一句话提示"仅供参考,不构成投资建议"。' }
 ];
 
 function anaMakeBlock(a){
@@ -1640,6 +1654,7 @@ function anaMakeBlock(a){
 async function runDeepAnalysis(){
   if(analyzing) return;
   const btn=document.getElementById('btnAnalyze');
+  if((!kBars || !kBars.length) && typeof loadKChart==='function'){ try{ await loadKChart(); }catch(e){} }  // 波段需日K, 兜底拉一次
   const md=collectMarketData();
   if(!md){ document.getElementById('anaHint').textContent='⏳ 行情/分时尚未加载完成, 请稍候再试(切到盯盘视图等数据出来)。'; return; }
   analyzing=true; btn.disabled=true; btn.textContent='🧠 分析中…';
