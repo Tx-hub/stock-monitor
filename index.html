@@ -25,6 +25,9 @@
   .stg-tabs { display:flex; gap:4px; margin-bottom:8px; flex-wrap:wrap; }
   .stg-btn { flex:1; min-width:60px; padding:5px 0; font-size:11px; background:#f5f7fa; border:1px solid #e3e8ef; border-radius:6px; color:#8a94a6; cursor:pointer; }
   .stg-btn.active { background:#eaf2fb; border-color:#bcd7f2; color:#3b82c4; font-weight:600; }
+  .etf-mode { display:flex; gap:6px; margin-bottom:8px; }
+  .etfm-btn { flex:1; padding:6px 0; font-size:12px; font-weight:600; background:#f5f7fa; border:1px solid #e3e8ef; border-radius:6px; color:#8a94a6; cursor:pointer; }
+  .etfm-btn.active { background:#3b82c4; border-color:#3b82c4; color:#fff; }
   .lt-brain { cursor:pointer; font-size:13px; }
   .lt-grok { background:#f8f9fc; border:1px solid #e3e8ef; border-radius:6px; padding:8px 10px; margin:2px 0 6px; font-size:12.5px; line-height:1.7; color:#2c3e50; white-space:pre-wrap; }
   .jiyin-ctrl { display:flex; gap:6px; margin-bottom:6px; }
@@ -255,6 +258,12 @@
       <!-- ETF池 -->
       <div id="poolEtf">
         <div class="pool-tip">适合做T的高波动 T+0 ETF · 点击查看 · <b>＋</b>加入自选</div>
+        <div class="etf-mode">
+          <button class="etfm-btn active" data-etfm="fixed">精选池</button>
+          <button class="etfm-btn" data-etfm="reco">🔥 智能推荐</button>
+        </div>
+        <!-- 精选池 -->
+        <div id="etfFixed">
         <div class="pool-sort">
           <span>排序:</span>
           <button class="ps-btn active" data-sort="cat">分类</button>
@@ -262,6 +271,17 @@
           <button class="ps-btn" data-sort="rsi">RSI6<span class="ps-arrow">↓</span></button>
         </div>
         <div id="poolList"></div>
+        </div>
+        <!-- 智能推荐 -->
+        <div id="etfReco" style="display:none">
+          <div class="pool-tip">从 336 只 T+0 ETF 按<b>振幅</b>智能推荐(振幅大+当日跌幅优先, 契合低吸) · 仅供参考</div>
+          <div class="jiyin-ctrl">
+            <button id="btnEtfReco">▶ 生成今日推荐</button>
+            <button id="btnEtfStop" style="display:none">■ 停止</button>
+          </div>
+          <div class="jiyin-status" id="etfRecoStatus">点击生成(数秒)</div>
+          <div id="recoList"></div>
+        </div>
       </div>
       <!-- 选股策略 -->
       <div id="poolJiyin" style="display:none">
@@ -695,6 +715,86 @@ function addFromPool(s){
   if(poolQuotes[s.code]) listQuotes[s.code]={...poolQuotes[s.code]};
   renderList(); updatePoolPrices();
 }
+
+// ==================== ETF 智能推荐 (振幅优先) ====================
+const ETF_CAND='sh520710,sh526030,sz159131,sh513000,sh526050,sh526010,sz159185,sh513620,sz159196,sh520850,sh526000,sh513360,sz159130,sz159169,sh513240,sh513200,sh520500,sz159132,sz159198,sh513780,sh520510,sh520870,sh513930,sz159366,sh513120,sz159102,sz159776,sh520930,sz159167,sh513280,sz159567,sh513880,sh520700,sh513700,sh520760,sz159262,sz159615,sz159316,sz159015,sz159506,sz159217,sz159010,sz159135,sz159557,sz159251,sz159297,sz159105,sz159137,sz159892,sz159286,sz159303,sh520840,sz159570,sz159152,sh520970,sz159866,sh513520,sz159120,sh520690,sh520880,sh513060,sh513990,sh520860,sz159125,sh513020,sh513150,sz159718,sh520980,sz159040,sh520630,sz159269,sh513900,sh513560,sh513320,sh520670,sz159100,sh520530,sh513160,sz159191,sh520790,sz159170,sz159687,sh513730,sz159822,sz159280,sh520920,sh513860,sh513980,sz159128,sz159659,sh526070,sz159101,sh520940,sh520960,sz159751,sz159126,sz159312,sh520770,sh513100,sh513300,sh520590,sz159792,sz159365,sz159740,sz159747,sh513130,sh513210,sh513580,sh513600,sh513770,sz159699,sz159742,sh513800,sh520650,sh513010,sz159318,sz159750,sh513330,sh520570,sz159028,sz159568,sz159660,sz159688,sh520910,sh513890,sh513970,sh513140,sh513720,sh513050,sh520950,sh513380,sh520680,sh513390,sh513660,sh513260,sz159513,sz159941,sz159980,sz159186,sz159741,sh513180,sh513550,sh520520,sz159239,sh513870,sh520620,sh520730,sz159109,sz159501,sz159607,sz159711,sh513040,sh513220,sz159632,sh513110,sz159202,sz159696,sh520780,sz159179,sz159712,sz159636,sh513070,sz159920,sz159121,sz159271,sz159245,sz159268,sh513630,sz159265,sz159605,sz159210,sz159735,sz159237,sz159954,sh520820,sh513500,sh513750,sz159285,sh513590,sz159726,sh520600,sh520560,sz159220,sz159655,sh513230,sh513030,sh513950,sh513650,sh520890,sz159831,sh513920,sz159812,sh520720,sz159333,sz159545,sz159281,sh520580,sz159612,sz159834,sh510900,sz159323,sz159577,sh518860,sz159569,sh511380,sh518890,sz159934,sz159937,sh511180,sh518880,sz159960,sh513190,sh518850,sz159117,sz159143,sh513850,sh518600,sh520610,sh520990,sh518680,sh520550,sz159691,sh518660,sz159561,sz159981,sh513080,sh511920,sz159112,sz159400,sh511190,sh518800,sz159110,sz159111,sz159113,sz159200,sz159397,sz159650,sh511110,sh511200,sh551060,sz159115,sz159395,sz159700,sz159816,sz159972,sh511010,sh511030,sh511120,sh511220,sh511260,sh511360,sh511520,sh511580,sh511600,sh511620,sh511670,sh511690,sh511700,sh511800,sh511830,sh511850,sh511860,sh511960,sh511990,sh551030,sh551550,sz159001,sz159003,sz159005,sz159118,sz159509,sz159600,sz159649,sz159651,sz159788,sz159850,sh511060,sh511070,sh511100,sh511160,sh511650,sh511660,sh511770,sh511810,sh511880,sh511900,sh511950,sh511970,sh511980,sh513910,sh520810,sh551300,sh551520,sh551560,sh551580,sh551900,sz159116,sh511020,sh511150,sh511270,sh551500,sh551800,sz159396,sz159398,sh551000,sh551510,sh511130,sh511090,sz159127,sz159266,sh520900,sh513810,sh513400,sz159519,sz159830,sh513530,sh520660,sz159277,sz159502,sz159331,sh513170,sh513290,sh513820,sz159329,sh513830,sh520830,sz159529,sz159302,sh513090,sz159985,sz159518,sh513350,sh511820,sh511910,sh511930,sh513310'.split(',');
+
+// 批量拉行情(script加载, 自动GBK解码), codes一批
+function fetchQuoteBatch(codes){
+  return new Promise((resolve)=>{
+    const s=document.createElement('script');
+    s.onload=()=>{ const out={}; codes.forEach(c=>{ const v=window['v_'+c]; if(v) out[c]=v; delete window['v_'+c]; }); s.remove(); resolve(out); };
+    s.onerror=()=>{ s.remove(); resolve({}); };
+    s.src='https://qt.gtimg.cn/q='+codes.join(',')+'&r='+Date.now();
+    document.body.appendChild(s);
+  });
+}
+let etfRecoRunning=false, etfRecoAbort=false, etfRecoResults=[];
+async function etfRecoRun(){
+  if(etfRecoRunning) return;
+  etfRecoRunning=true; etfRecoAbort=false; etfRecoResults=[];
+  document.getElementById('btnEtfReco').style.display='none';
+  document.getElementById('btnEtfStop').style.display='';
+  document.getElementById('recoList').innerHTML='';
+  const setSt=t=>{ const e=document.getElementById('etfRecoStatus'); if(e)e.textContent=t; };
+  try{
+    const all=[]; const CH=40;
+    for(let i=0;i<ETF_CAND.length && !etfRecoAbort;i+=CH){
+      const batch=ETF_CAND.slice(i,i+CH);
+      const raw=await fetchQuoteBatch(batch);
+      Object.keys(raw).forEach(code=>{
+        const p=raw[code].split('~');
+        if(p.length<44) return;
+        const price=parseFloat(p[3]), chg=parseFloat(p[32]), amp=parseFloat(p[43]), turn=parseFloat(p[38]);
+        if(!(price>0) || isNaN(amp)) return;
+        all.push({code, name:p[1], price:+price.toFixed(3), chg:+(chg||0).toFixed(2), amp:+(amp||0).toFixed(2), turn:+(turn||0).toFixed(1)});
+      });
+      setSt('拉取中 '+Math.min(i+CH,ETF_CAND.length)+'/'+ETF_CAND.length+'…');
+      await new Promise(r=>setTimeout(r,60));
+    }
+    // 打分: 振幅为主 + 当日跌幅加权(跌得多加分, 契合低吸)
+    all.forEach(s=>{ s.score=+(s.amp + Math.max(0,-s.chg)*0.3).toFixed(2); });
+    all.sort((a,b)=>b.score-a.score);
+    etfRecoResults=all.slice(0,30);
+    etfRecoRender();
+    if(!etfRecoAbort){ setSt('完成！从'+all.length+'只有效ETF中按振幅推荐Top'+etfRecoResults.length+' · '+new Date().toISOString().slice(0,10)); saveStratResult('etf_reco', etfRecoResults); }
+  }catch(e){ setSt('出错: '+e.message); }
+  finally{
+    etfRecoRunning=false;
+    document.getElementById('btnEtfReco').style.display=''; document.getElementById('btnEtfReco').textContent='▶ 重新生成';
+    document.getElementById('btnEtfStop').style.display='none';
+  }
+}
+function etfRecoRender(){
+  const box=document.getElementById('recoList'); box.innerHTML='';
+  if(!etfRecoResults.length) return;
+  const cat=document.createElement('div'); cat.className='pool-cat'; cat.textContent='智能推荐 · 振幅降序(含跌幅加权)'; box.appendChild(cat);
+  etfRecoResults.forEach((s,idx)=>{
+    const div=document.createElement('div');
+    div.className='pool-item'+(s.code===CODE?' active':'');
+    div.dataset.code=s.code;
+    const inW=watchList.some(x=>x.code===s.code);
+    const cls=s.chg>0?'up':(s.chg<0?'down':'flat');
+    div.innerHTML=
+      '<div style="flex:1;min-width:0"><div class="pi-name">'+(idx+1)+'. '+s.name+'</div><div class="pi-code">'+s.code.toUpperCase()+' · 换手'+s.turn+'%</div></div>'+
+      '<div class="pi-right"><div class="pi-price '+cls+'">'+s.price.toFixed(3)+'</div><div class="pi-sub '+cls+'">'+(s.chg>0?'+':'')+s.chg.toFixed(2)+'% <span class="pi-score">振'+s.amp.toFixed(1)+'</span></div></div>'+
+      '<span class="pi-add'+(inW?' added':'')+'">'+(inW?'✓':'＋')+'</span>';
+    div.addEventListener('click', e=>{ if(e.target.classList.contains('pi-add'))return; switchStock(s.code); });
+    div.querySelector('.pi-add').addEventListener('click', e=>{ e.stopPropagation(); addFromPool(s); });
+    box.appendChild(div);
+  });
+}
+// ETF模式切换 + 按钮绑定
+document.querySelectorAll('.etfm-btn').forEach(b=>b.addEventListener('click', ()=>{
+  const m=b.dataset.etfm;
+  document.querySelectorAll('.etfm-btn').forEach(x=>x.classList.toggle('active', x===b));
+  document.getElementById('etfFixed').style.display = m==='fixed'?'':'none';
+  document.getElementById('etfReco').style.display = m==='reco'?'':'none';
+  if(m==='reco'){ const c=loadStrats()['etf_reco']; if(c&&c.list&&c.list.length){ etfRecoResults=c.list; etfRecoRender(); const stale=c.date!==new Date().toISOString().slice(0,10); document.getElementById('etfRecoStatus').textContent='上次 '+c.date+(stale?' ⚠️非今日,建议重生成':'')+' · '+c.list.length+'只'; document.getElementById('btnEtfReco').textContent='▶ 重新生成'; } }
+}));
+document.getElementById('btnEtfReco').onclick=etfRecoRun;
+document.getElementById('btnEtfStop').onclick=()=>{ etfRecoAbort=true; };
+
 
 // ==================== 极阴尾排 选股策略 (JS复刻通达信极阴27) ====================
 // 指标函数(对齐pandas语义, 已与Python逐项校验一致)
