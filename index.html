@@ -60,6 +60,8 @@
   .stock-item { display:flex; justify-content:space-between; align-items:center; padding:8px 8px; border-radius:7px; cursor:pointer; margin-bottom:3px; border:1px solid transparent; transition:background .15s; }
   .stock-item:hover { background:#f2f6fb; }
   .stock-item.active { background:#eaf2fb; border-color:#bcd7f2; }
+  .stock-item.rsi-alert { background:#eafaf1; border-color:#1aae6f; box-shadow:0 0 0 1px #1aae6f inset; animation:rsiBlink 1.2s ease-in-out infinite; }
+  @keyframes rsiBlink { 0%,100%{ background:#eafaf1; } 50%{ background:#c9f0dd; } }
   .stock-item.dragging { opacity:.4; }
   .stock-item.drag-over { border-color:#3b82c4; border-style:dashed; background:#f0f7ff; }
   .stock-item .si-mid { display:flex; align-items:center; }
@@ -505,11 +507,13 @@ function updateListPrices(){
     pe.className='si-price '+cls; ce.className='si-chg '+cls;
     // RSI6: >80超买(红) <20超卖(绿) 其余灰
     const re=div.querySelector('.si-rsi');
+    const low = q.rsi6!=null && q.rsi6<20;
     if(re){
       const rv=q.rsi6;
-      re.textContent = rv!=null?('RSI '+rv.toFixed(1)):'RSI —';
+      re.textContent = rv!=null?((low?'🔔RSI ':'RSI ')+rv.toFixed(1)):'RSI —';
       re.className='si-rsi '+(rv==null?'':(rv>=80?'up':(rv<=20?'down':'flat')));
     }
+    div.classList.toggle('rsi-alert', low);  // RSI6<20 高亮标识
     div.classList.toggle('active', code===CODE);
   });
 }
