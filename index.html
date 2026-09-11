@@ -1696,9 +1696,9 @@ document.getElementById('btnAuto').onclick=function(){
 
 // ===== TradingAgents 多智能体深度分析 =====
 // ⚠️ 安全提醒: 本Key硬编码在公开仓库, 会明文暴露、可能被盗刷。请为该Key设用量上限, 必要时轮换。
-const ARK_URL = 'https://elysia.h-e.top/v1/chat/completions';
-const ARK_KEY = 'sk-zNrGdSxBcb7N54AR4bjPpZr5IHeOKjCFVoUxmOH5p9kMRoPY';
-const ARK_MODEL = 'deepseek-v4-flash-0731';
+const ARK_URL = 'https://api.supxh.xin/v1/chat/completions';
+const ARK_KEY = 'sk-MH0X67OFv55B1PRS6Ujg1lgORYa05h0o4Ix8WVbBWY1yfyXO';
+const ARK_MODEL = 'claude-sonnet-4-5';
 
 // 流式调用(OpenAI chat.completions SSE), 每收到正文delta回调onDelta
 async function callArkStream(instructions, input, onDelta){
