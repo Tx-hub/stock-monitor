@@ -291,7 +291,10 @@
           <button class="stg-btn active" data-stg="jiyin">极阴尾排</button>
           <button class="stg-btn" data-stg="longtou">龙头回踩</button>
           <button class="stg-btn" data-stg="fanbao">反包</button>
+        </div>
+        <div class="stg-tabs" style="margin-top:-4px">
           <button class="stg-btn" data-stg="ltprob">龙头概率</button>
+          <button class="stg-btn" data-stg="dreamer">大A梦想家</button>
         </div>
         <div class="pool-tip" id="stgTip">极阴尾排 · 扫全市场主板 · 得分降序 · Top1为当日票 · 仅供参考不构成投资建议</div>
         <div class="jiyin-ctrl">
@@ -954,6 +957,51 @@ function longtouEval(bars, code, name){
   if(!(trend&&isline&&pull&&shrink&&steady)) return null;
   return { code, name, close:+C[i].toFixed(2), chg:+(pct*100).toFixed(2), score:+(mom60*100).toFixed(1) };
 }
+// ---- 大A梦想家 eval (顺势回调转强; 核心版: 市场过滤 + 日线形态) ----
+function dreamerEval(bars, code, name){
+  const MAF=20, MAS=60, U=3, PL=20, PMIN=2, PMAX=5, VRATIO=0.7, SRATIO=1.2;
+  const MINB=MAS+PL+U+PMAX+5;
+  if(!bars||bars.length<MINB) return null;
+  if(name.includes('ST')||name.includes('退')) return null;
+  const C=bars.map(b=>b.c),O=bars.map(b=>b.o),H=bars.map(b=>b.h),L=bars.map(b=>b.l),V=bars.map(b=>b.v);
+  const n=bars.length, t=n-1;
+  // 个股趋势: C>MA20>MA60
+  const ma=(arr,m)=>{ let s=0; for(let k=0;k<m;k++)s+=arr[t-k]; return s/m; };
+  const MA20=ma(C,MAF), MA60=ma(C,MAS);
+  if(!(C[t]>MA20 && MA20>MA60)) return null;
+  // 转强日: 阳线, 收盘>前日最高
+  if(!(C[t]>O[t] && C[t]>H[t-1])) return null;
+  // 遍历回调窗口 2-5 天(短优先)
+  for(let pb=PMIN; pb<=PMAX; pb++){
+    const p=t-pb; // 上涨末日 = 回调前一天
+    if(p-U-PL<0||p-U-1<0) continue;
+    // 3连涨: C[p-U], C[p-U+1], C[p-U+2], C[p-1] 依次增高
+    const upS=p-U; let allUp=true;
+    for(let k=upS;k<p-1;k++){ if(!(C[k+1]>C[k])){allUp=false;break;} }
+    if(!allUp) continue;
+    // 支撑 = 上涨段前20日最高
+    let support=-Infinity;
+    for(let k=upS-PL;k<=upS-1;k++){ if(H[k]>support)support=H[k]; }
+    if(!(C[p-1]>support)) continue;
+    if(!(C[t-1]<C[p-1])) continue;
+    let maxPC=-Infinity;
+    for(let k=p;k<t;k++){ if(C[k]>maxPC)maxPC=C[k]; }
+    if(!(maxPC<=C[p-1])) continue;
+    let minPL=Infinity;
+    for(let k=p;k<=t;k++){ if(L[k]<minPL)minPL=L[k]; }
+    if(!(minPL>=support)) continue;
+    // 量: 回调均量/上涨均量<=0.7, 转强量/前日量>=1.2
+    let upV=0; for(let k=upS;k<p;k++)upV+=V[k]; upV/=U;
+    if(upV<=0||!isFinite(upV)) continue;
+    let pullV=0; for(let k=p;k<t;k++)pullV+=V[k]; pullV/=(t-p);
+    if(!(pullV/upV<=VRATIO)) continue;
+    if(!(V[t]/V[t-1]>=SRATIO)) continue;
+    const close=+C[t].toFixed(2);
+    return {code,name,close,chg:+((C[t]-C[t-1])/C[t-1]*100).toFixed(2),
+      score:PMAX+1-pb, support:+support.toFixed(2), trigger:+H[t].toFixed(2), pullbackDays:pb};
+  }
+  return null;
+}
 // ---- 反包 eval (不补当日; 日线最后一根=断板日, >=2连板断板, 实时价>反包线) ----
 async function fanbaoEval(bars, code, name){
   if(!bars || bars.length<60) return null;
@@ -1074,6 +1122,7 @@ const STRATS={
   longtou:{ label:'龙头回踩 · 主线龙头回踩MA10缩量企稳 · 按60日涨幅降序', bars:120, attach:true,  scoreName:'涨', evalSync:longtouEval },
   fanbao: { label:'反包 · 断板后现价站上反包线 · 按连板高度降序', bars:520, attach:false, scoreName:'板', evalAsync:fanbaoEval },
   ltprob: { label:'龙头概率 · 涨停池6维打分×环境系数 · 得分降序', mode:'ztpool', scoreName:'龙' },
+  dreamer:{ label:'大A梦想家 · 顺势回调转强 · 全市场主板 · 回调天数', bars:200, attach:true, scoreName:'天', evalSync:dreamerEval },
 };
 let curStrat='jiyin';
 
@@ -1118,6 +1167,20 @@ async function jiyinKlineN(code, count){
   return null;
 }
 
+// 大A梦想家 市场过滤: 沪深300收盘>MA20 且 MA20>5日前MA20
+async function dreamerMarketFilter(){
+  try{
+    const bars=await jiyinKlineN('sh000300', 80);
+    if(!bars||bars.length<30) return {ok:false, reason:'无法获取沪深300日线'};
+    const C=bars.map(b=>b.c), n=bars.length, t=n-1;
+    const ma=(arr,m)=>{ let s=0, ti=arr.length-1; for(let k=0;k<m;k++)s+=arr[ti-k]; return s/m; };
+    const MA20=ma(C,20), MA20_5=ma(C.slice(0,-5), 20); // 5日前MA20
+    if(!(C[t]>MA20)) return {ok:false, reason:'沪深300未站上MA20（收盘'+C[t].toFixed(0)+' MA20 '+MA20.toFixed(0)+'）'};
+    if(!(MA20>MA20_5)) return {ok:false, reason:'沪深300 MA20未上行（MA20 '+MA20.toFixed(0)+' 5日前 '+MA20_5.toFixed(0)+'）'};
+    return {ok:true};
+  }catch(e){ return {ok:false, reason:'市场过滤查询异常: '+e.message}; }
+}
+
 async function jiyinScan(){
   if(jiyinScanning) return;
   const cfg=STRATS[curStrat];
@@ -1140,6 +1203,13 @@ async function jiyinScan(){
         saveStratResult('ltprob', jiyinResults);
       }
       return;
+    }
+    // 大A梦想家: 先查市场过滤
+    if(curStrat==='dreamer'){
+      jiyinSetStatus('检测沪深300趋势…');
+      const mkt=await dreamerMarketFilter();
+      if(!mkt.ok){ jiyinSetStatus('市场过滤不通过: '+mkt.reason+' — 暂不扫描（顺势而为）'); return; }
+      jiyinSetStatus('市场过滤通过（沪深300站上MA20且上行），开始扫描…');
     }
     jiyinSetStatus('拉取全市场主板列表…');
     const uni=await jiyinUniverse();
@@ -1204,6 +1274,12 @@ function jiyinRender(){
         '<div class="pi-right"><div class="pi-price '+cls+'">'+s.close.toFixed(2)+'</div><div class="pi-sub '+cls+'">'+(s.chg>0?'+':'')+s.chg.toFixed(2)+'% <span class="pi-score">'+scoreTxt+'</span></div></div>'+
         '<span class="pi-add'+(inW?' added':'')+'">'+(inW?'✓':'＋')+'</span>';
       div.querySelector('.lt-brain').addEventListener('click', e=>{ e.stopPropagation(); ltGrokAnalyze(s, div); });
+    } else if(curStrat==='dreamer'){
+      const sub2='回调'+s.pullbackDays+'天 · 支撑'+s.support+' · 触发'+s.trigger;
+      div.innerHTML=
+        '<div><div class="pi-name">'+(idx+1)+'. '+s.name+'</div><div class="pi-code">'+s.code.toUpperCase()+' · '+sub2+'</div></div>'+
+        '<div class="pi-right"><div class="pi-price '+cls+'">'+s.close.toFixed(2)+'</div><div class="pi-sub '+cls+'">'+(s.chg>0?'+':'')+s.chg.toFixed(2)+'% <span class="pi-score">'+scoreTxt+'</span></div></div>'+
+        '<span class="pi-add'+(inW?' added':'')+'">'+(inW?'✓':'＋')+'</span>';
     } else {
       div.innerHTML=
         '<div><div class="pi-name">'+(idx+1)+'. '+s.name+'</div><div class="pi-code">'+s.code.toUpperCase()+'</div></div>'+
