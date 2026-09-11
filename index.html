@@ -1696,38 +1696,47 @@ document.getElementById('btnAuto').onclick=function(){
 
 // ===== TradingAgents 多智能体深度分析 =====
 // ⚠️ 安全提醒: 本Key硬编码在公开仓库, 会明文暴露、可能被盗刷。请为该Key设用量上限, 必要时轮换。
-const ARK_URL = 'https://api.supxh.xin/v1/chat/completions';
-const ARK_KEY = 'sk-MH0X67OFv55B1PRS6Ujg1lgORYa05h0o4Ix8WVbBWY1yfyXO';
-const ARK_MODEL = 'claude-sonnet-4-5';
+// 多AI源: 主源失败(网络/CORS/限流/错误)自动降级到下一个
+const AI_SOURCES = [
+  { url:'https://api.justwoker.icu/v1/chat/completions', key:'sk-Glsu4YsFJNG5iz3D1goo03cJXZiArIleTUir5xzLd0KRQcOI', model:'gpt-5.6-terra' },
+  { url:'https://api.supxh.xin/v1/chat/completions', key:'sk-MH0X67OFv55B1PRS6Ujg1lgORYa05h0o4Ix8WVbBWY1yfyXO', model:'claude-sonnet-4-5' }
+];
 
-// 流式调用(OpenAI chat.completions SSE), 每收到正文delta回调onDelta
+// 流式调用(OpenAI chat.completions SSE), 主源失败自动切备源; 每收到正文delta回调onDelta
 async function callArkStream(instructions, input, onDelta){
-  const resp = await fetch(ARK_URL, {
-    method:'POST',
-    headers:{ 'Authorization':'Bearer '+ARK_KEY, 'Content-Type':'application/json' },
-    body: JSON.stringify({ model:ARK_MODEL, messages:[{role:'system',content:instructions},{role:'user',content:input}], stream:true, max_tokens:1200 })
-  });
-  if(!resp.ok){ throw new Error('HTTP '+resp.status+' '+(await resp.text()).slice(0,120)); }
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder();
-  let buf='', full='';
-  while(true){
-    const {done, value} = await reader.read();
-    if(done) break;
-    buf += decoder.decode(value, {stream:true});
-    const parts = buf.split('\n\n');       // SSE以空行分隔事件
-    buf = parts.pop();                      // 末尾可能不完整, 留到下一轮
-    for(const block of parts){
-      const line = block.split('\n').find(l=>l.startsWith('data:'));
-      if(!line) continue;
-      const jsonStr = line.slice(5).trim();
-      if(!jsonStr || jsonStr==='[DONE]') continue;
-      let d; try{ d=JSON.parse(jsonStr); }catch(e){ continue; }
-      const delta = d.choices && d.choices[0] && d.choices[0].delta && d.choices[0].delta.content;
-      if(delta){ full+=delta; onDelta(delta); }
-    }
+  let lastErr=null;
+  for(let si=0; si<AI_SOURCES.length; si++){
+    const src=AI_SOURCES[si];
+    try{
+      const resp = await fetch(src.url, {
+        method:'POST',
+        headers:{ 'Authorization':'Bearer '+src.key, 'Content-Type':'application/json' },
+        body: JSON.stringify({ model:src.model, messages:[{role:'system',content:instructions},{role:'user',content:input}], stream:true, max_tokens:1200 })
+      });
+      if(!resp.ok){ lastErr=new Error('HTTP '+resp.status); continue; }  // 换下一个源
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf='', full='';
+      while(true){
+        const {done, value} = await reader.read();
+        if(done) break;
+        buf += decoder.decode(value, {stream:true});
+        const parts = buf.split('\n\n');
+        buf = parts.pop();
+        for(const block of parts){
+          const line = block.split('\n').find(l=>l.startsWith('data:'));
+          if(!line) continue;
+          const jsonStr = line.slice(5).trim();
+          if(!jsonStr || jsonStr==='[DONE]') continue;
+          let d; try{ d=JSON.parse(jsonStr); }catch(e){ continue; }
+          const delta = d.choices && d.choices[0] && d.choices[0].delta && d.choices[0].delta.content;
+          if(delta){ full+=delta; onDelta(delta); }
+        }
+      }
+      return full;  // 成功
+    }catch(e){ lastErr=e; /* 网络/CORS失败, 换下一个源 */ }
   }
-  return full;
+  throw lastErr || new Error('所有AI源均不可用');
 }
 
 // 采样分时序列(约20点), 控制token
