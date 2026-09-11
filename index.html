@@ -348,10 +348,12 @@
   </div>
 
   <div class="panel" id="analysisPanel">
-    <h2>🧠 TradingAgents 多智能体深度分析</h2>
+    <h2 id="anaHead" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">🧠 TradingAgents 多智能体深度分析 <span id="anaArrow" style="transition:transform .2s;color:#8a94a6">▾</span></h2>
+    <div id="anaFold">
     <div class="ana-hint" id="anaHint">点击上方「深度分析」，5位AI分析师（技术面·多头·空头·交易员·风控）将依次研判，同时给出【做T】和【波段】两套建议(含持有周期)。</div>
     <div id="anaBody"></div>
     <div class="ana-disc">⚠️ 以上为AI生成的多智能体研判，仅供参考，不构成投资建议。市场有风险，决策需谨慎。</div>
+    </div>
   </div>
 
   <div class="panel" id="chartPanel" style="position:relative">
@@ -577,10 +579,43 @@ async function refreshList(){
     if(prices && prices.length>1){
       const rr=calcRSI(prices,6);
       const last=[...rr].reverse().find(v=>v!=null);
-      if(last!=null) listQuotes[s.code]={...(listQuotes[s.code]||{}), rsi6:last};
+      if(last!=null){
+        listQuotes[s.code]={...(listQuotes[s.code]||{}), rsi6:last};
+        rsiAlertCheck(s.code, s.name||s.code, last);  // RSI6<20声音提醒
+      }
     }
   }
   updateListPrices();
+}
+
+// ===== RSI6<20 声音提醒 =====
+let rsiAlerted=new Set();   // 已提醒的code(回升到>=22再清除, 避免反复响)
+let audioCtx=null;
+function beep(){
+  try{
+    audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==='suspended') audioCtx.resume();
+    // 两声短促提示音
+    [0,0.25].forEach(dt=>{
+      const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+      o.type='sine'; o.frequency.value=880;
+      o.connect(g); g.connect(audioCtx.destination);
+      const t=audioCtx.currentTime+dt;
+      g.gain.setValueAtTime(0.001,t); g.gain.exponentialRampToValueAtTime(0.3,t+0.02);
+      g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
+      o.start(t); o.stop(t+0.2);
+    });
+  }catch(e){}
+}
+function rsiAlertCheck(code, name, rsi){
+  if(rsi<20 && !rsiAlerted.has(code)){
+    rsiAlerted.add(code);
+    beep();
+    try{ if(Notification&&Notification.permission==='granted') new Notification('RSI6低位提醒', {body:name+' RSI6='+rsi.toFixed(1)+' (<20)'}); }catch(e){}
+    const el=document.getElementById('updtime'); if(el){ el.textContent='🔔 '+name+' RSI6='+rsi.toFixed(1)+' 低于20'; }
+  } else if(rsi>=22 && rsiAlerted.has(code)){
+    rsiAlerted.delete(code);  // 回升, 允许下次再提醒
+  }
 }
 
 // ===== 股票池: 适合做T的高波动 T+0 ETF (已剔除货币/债券/红利等低波动) =====
@@ -1842,6 +1877,13 @@ async function runDeepAnalysis(){
   }
 }
 document.getElementById('btnAnalyze').onclick=runDeepAnalysis;
+// 深度分析面板折叠(全端可用)
+document.getElementById('anaHead').addEventListener('click', ()=>{
+  const fold=document.getElementById('anaFold'), arr=document.getElementById('anaArrow');
+  const hidden=fold.style.display==='none';
+  fold.style.display=hidden?'':'none';
+  arr.style.transform=hidden?'':'rotate(-90deg)';
+});
 
 // ===== 自选股云端同步 (GitHub Gist) =====
 // ⚠️ token 属用户敏感信息, 仅存本地 localStorage, 绝不写入代码或提交仓库。
