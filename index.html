@@ -322,7 +322,7 @@
     <button id="btnRefresh">立即刷新</button>
     <button id="btnAuto" class="on">自动刷新: 开(每5秒)</button>
     <button id="btnAnalyze">🧠 个股5Agent分析</button>
-    <button id="btnMarketAnalyze">🌐 大盘4Agent：买哪个</button>
+    <button id="btnMarketAnalyze">🌐 大盘4Agent盯票</button>
     <span class="tip">数据源腾讯行情·完整分时·仅供参考不构成投资建议</span>
   </div>
 
@@ -363,7 +363,7 @@
   <div class="panel" id="analysisPanel">
     <h2 id="anaHead" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">🧠 AI分析：个股5Agent + 大盘4Agent <span id="anaArrow" style="transition:transform .2s;color:#8a94a6">▾</span></h2>
     <div id="anaFold">
-    <div class="ana-hint" id="anaHint">「个股5Agent」分析当前标的做T/波段；「大盘4Agent：买哪个」使用野人、博哥、义水三个框架 + 汇总Agent，从已有候选池里直接给首选/备选/不买结论。</div>
+    <div class="ana-hint" id="anaHint">「个股5Agent」分析当前标的做T/波段；「大盘4Agent」使用野人、博哥、义水三个框架 + 汇总Agent，从已有扫描/推荐结果里告诉你重点关注哪些票。</div>
     <div id="anaBody"></div>
     <div class="ana-disc">⚠️ 以上为AI生成的多智能体研判，仅供参考，不构成投资建议。市场有风险，决策需谨慎。</div>
     </div>
@@ -1955,13 +1955,13 @@ const STOCK_AGENTS = [
 // 大盘4Agent：负责从扫描/推荐结果里选关注票
 const MARKET_AGENTS = [
   { key:'m_yeren', role:'🧭 野人框架Agent', badge:'环境/结构', cls:'',
-    sys:'你使用“全能的野人交易框架”。基于全市场扫描/ETF推荐/策略池结果，必须先给一句明确结论:【首选/备选/不买】。按 市场环境→板块题材→个股结构→触发与失效→风险预算 筛出最值得关注的1-3只票。不能只讲框架；候选不等于买点，必须给触发价/回踩区/失效条件。240字内, 不要免责声明。' },
+    sys:'你使用“全能的野人交易框架”。基于全市场扫描/ETF推荐/策略池结果，按 市场环境→板块题材→个股结构→触发与失效→风险预算 筛出最值得关注的1-3只票。候选不等于买点，必须给触发条件和失效条件。220字内, 不要免责声明。' },
   { key:'m_boge', role:'🔥 博哥短线Agent', badge:'主线/梯队', cls:'role-bull',
-    sys:'你使用“东风西路博哥短线框架”。必须先给一句明确结论:【今天最该盯/可小仓试/不买】。顺序固定: 环境定仓位, 主线定方向, 核心定锚点, 梯队定节奏, 盘口定买卖。基于候选池点名1-3只票，给观察锚、盘口确认、仓位上限和放弃条件。240字内, 不要免责声明。' },
+    sys:'你使用“东风西路博哥短线框架”。顺序固定: 环境定仓位, 主线定方向, 核心定锚点, 梯队定节奏, 盘口定买卖。基于候选池判断今天重点盯哪些方向/哪些票，输出可交易/仅观察/回避、观察锚、盘口确认和仓位上限。240字内, 不要免责声明。' },
   { key:'m_yishui', role:'🌊 义水复盘Agent', badge:'弱转强/参照', cls:'role-bear',
-    sys:'你使用“义水北路交易复盘框架”。必须先给一句明确结论:【条件已满足/未满足/信息不足】并点名票。按 环境判断→参照关系→条件核验→风险测算→退出预案 筛票。重点看主动核心、弱转强有效性、参照股是否支持。输出优先票、确认条件和证伪条件。240字内, 不要免责声明。' },
+    sys:'你使用“义水北路交易复盘框架”。从候选池中按 环境判断→参照关系→条件核验→风险测算→退出预案 筛票。重点看主动核心、弱转强有效性、参照股是否支持。输出“优先关注/仅观察/放弃”及确认和证伪条件。240字内, 不要免责声明。' },
   { key:'m_summary', role:'🧠 汇总盯票Agent', badge:'总名单', cls:'role-trader',
-    sys:'你是最终汇总Agent。任务是直接回答“我应该买哪个/盯哪个”。第一行必须是：【结论】首选：名称代码；备选：名称代码；若不适合买则写“现在不买，等触发”。随后最多列3只，格式固定: 1.【首选】名称代码｜方向(做T/短线/波段)｜触发买点/回踩区｜止损/放弃条件｜仓位。不要输出超过3只，不要只说关注方向。若数据不足，给“先重扫ETF推荐/龙头概率/大A梦想家”的动作。320字内。结尾提示“仅供参考，不构成投资建议”。' }
+    sys:'你是最终汇总Agent。综合前三个策略Agent，输出今天/下一交易日最该关注的票。必须给: 【优先级1-5】每只票名称代码；【为什么盯】；【触发再看/触发才做】；【放弃条件】；【适合做T/短线/波段】。若数据不足，明确建议先重扫哪些策略。280字内。结尾提示“仅供参考，不构成投资建议”。' }
 ];
 
 function anaMakeBlock(a){
@@ -2075,7 +2075,7 @@ async function runMarketAnalysis(){
     const err=document.createElement('div'); err.className='ana-hint'; err.style.color='#d63a4d';
     err.textContent='❌ 分析出错: '+e.message; body.appendChild(err);
   }finally{
-    analyzing=false; btn.disabled=false; btn.textContent='🌐 大盘4Agent：买哪个';
+    analyzing=false; btn.disabled=false; btn.textContent='🌐 大盘4Agent盯票';
     if(sbtn) sbtn.disabled=false;
   }
 }
