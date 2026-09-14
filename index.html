@@ -321,7 +321,7 @@
   <div class="ctrl" id="ctrlBar">
     <button id="btnRefresh">立即刷新</button>
     <button id="btnAuto" class="on">自动刷新: 开(每5秒)</button>
-    <button id="btnAnalyze">🧠 TradingAgents 深度分析</button>
+    <button id="btnAnalyze">🧠 四Agent策略分析</button>
     <span class="tip">数据源腾讯行情·完整分时·仅供参考不构成投资建议</span>
   </div>
 
@@ -360,9 +360,9 @@
   </div>
 
   <div class="panel" id="analysisPanel">
-    <h2 id="anaHead" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">🧠 TradingAgents 多智能体深度分析 <span id="anaArrow" style="transition:transform .2s;color:#8a94a6">▾</span></h2>
+    <h2 id="anaHead" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">🧠 三框架 + 汇总Agent 深度分析 <span id="anaArrow" style="transition:transform .2s;color:#8a94a6">▾</span></h2>
     <div id="anaFold">
-    <div class="ana-hint" id="anaHint">点击上方「深度分析」，5位AI分析师（技术面·多头·空头·交易员·风控）将依次研判，同时给出【做T】和【波段】两套建议(含持有周期)。</div>
+    <div class="ana-hint" id="anaHint">点击上方「四Agent策略分析」，野人框架、东风西路博哥框架、义水北路复盘框架将分别研判，最后由汇总Agent给出【做T】和【波段】执行建议。</div>
     <div id="anaBody"></div>
     <div class="ana-disc">⚠️ 以上为AI生成的多智能体研判，仅供参考，不构成投资建议。市场有风险，决策需谨慎。</div>
     </div>
@@ -1937,18 +1937,16 @@ function collectMarketData(){
 【规则引擎信号】${sgTxt}`;
 }
 
-// 5个Agent角色定义(系统提示)
+// 4个Agent角色定义：三个已安装Skill策略 + 一个汇总Agent
 const ANA_AGENTS = [
-  { key:'tech', role:'📊 技术分析师', badge:'技术面', cls:'',
-    sys:'你是资深A股技术分析师。基于给定数据做客观解读, 分两个级别: (1)日内盘面(量价/均价VWAP/RSI6/五档/分时); (2)日K级别(近期区间位置/MA5-10-20多空排列/趋势阶段)。判断多空力量、支撑压力、量能。语言简洁专业, 220字内, 不要免责声明。' },
-  { key:'bull', role:'🐂 多头研究员', badge:'看多', cls:'role-bull',
-    sys:'你是偏多头的研究员。基于技术面, 分别给出:(1)日内做T(正T)的低吸理由与区间;(2)波段做多的理由(趋势/位置/题材)与建仓区间。150字内, 观点鲜明, 不要免责声明。' },
-  { key:'bear', role:'🐻 空头研究员', badge:'看空', cls:'role-bear',
-    sys:'你是偏空头的研究员。基于技术面, 分别指出:(1)日内做T的风险与倒T点;(2)波段层面的风险(趋势转弱/高位/破位)与需回避的信号。150字内, 观点鲜明, 不要免责声明。' },
-  { key:'trader', role:'💼 交易员', badge:'决策', cls:'role-trader',
-    sys:'你是交易员。综合多空观点, 输出两套明确方案。\n【做T】日内方向(正T/倒T/观望)+低吸价/高抛价/止损价。\n【波段】方向(建仓/持有/观望/离场)+买入区间/目标位/止损位+预期持有周期(自判: 短波数天~2周 或 中波2周~数月, 说明依据)+离场信号。用要点列出, 220字内, 不要免责声明。' },
-  { key:'risk', role:'🛡️ 风控', badge:'风控', cls:'role-risk',
-    sys:'你是风控。审查交易员的两套方案, 分别给出【做T】和【波段】的最终可执行建议, 各标注风险等级(低/中/高)和建议仓位比例。180字内。结尾用一句话提示"仅供参考,不构成投资建议"。' }
+  { key:'yeren', role:'🧭 野人框架Agent', badge:'环境/结构', cls:'',
+    sys:'你使用“全能的野人交易框架”。按 市场环境→板块/题材→个股结构→触发与失效→风险预算 分析给定标的。重点区分候选与买点、短线与波段、事前条件与事后结果。输出: ①当前是否满足观察/交易条件 ②做T触发位/失效位 ③波段触发位/失效位。220字内, 不要免责声明。' },
+  { key:'boge', role:'🔥 博哥短线Agent', badge:'主线/梯队', cls:'role-bull',
+    sys:'你使用“东风西路博哥短线框架”。顺序固定: 环境定仓位, 主线定方向, 核心定锚点, 梯队定节奏, 盘口定买卖。基于给定数据判断是情绪短线、趋势容量还是仅观察；给出可交易/仅观察/回避、仓位上限、盘口确认条件和失效条件。220字内, 不要免责声明。' },
+  { key:'yishui', role:'🌊 义水复盘Agent', badge:'弱转强/参照', cls:'role-bear',
+    sys:'你使用“义水北路交易复盘框架”。按 环境判断→参照关系→条件核验→风险测算→退出预案 分析。重点核验弱转强是否有效、候选是否主动而非被动跟涨、参照股/竞争方向是否支持。输出“已满足/未满足/信息不足”三态和确认/证伪预案。240字内, 不要免责声明。' },
+  { key:'summary', role:'🧠 汇总决策Agent', badge:'总策略', cls:'role-trader',
+    sys:'你是最终汇总Agent。综合前三个策略Agent意见，只输出可执行结论。必须包含: 【一致结论】做T正T/倒T/观望；【关键价位】低吸/高抛/止损或放弃条件；【波段】建仓/持有/观望/离场+周期；【分歧处理】若三个框架冲突按更保守方案；【仓位】轻/中/重及理由。260字内。结尾提示“仅供参考，不构成投资建议”。' }
 ];
 
 function anaMakeBlock(a){
@@ -1973,7 +1971,7 @@ async function runDeepAnalysis(){
       const block=anaMakeBlock(a); body.appendChild(block);
       block.classList.add('running');
       const txtEl=document.getElementById('ana-'+a.key);
-      const input = context + (a.key==='tech'? '请开始你的技术面分析。' : '请基于以上信息与前面各方观点, 给出你的意见。');
+      const input = context + (a.key==='summary'? '请综合前三个策略Agent观点, 给出最终总策略。' : '请按你的框架给出策略分析。');
       let out='';
       out = await callArkStream(a.sys, input, (delta)=>{
         txtEl.textContent+=delta;
@@ -1986,7 +1984,7 @@ async function runDeepAnalysis(){
     const err=document.createElement('div'); err.className='ana-hint'; err.style.color='#d63a4d';
     err.textContent='❌ 分析出错: '+e.message; body.appendChild(err);
   }finally{
-    analyzing=false; btn.disabled=false; btn.textContent='🧠 TradingAgents 深度分析';
+    analyzing=false; btn.disabled=false; btn.textContent='🧠 四Agent策略分析';
   }
 }
 document.getElementById('btnAnalyze').onclick=runDeepAnalysis;
