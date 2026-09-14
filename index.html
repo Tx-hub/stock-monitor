@@ -786,6 +786,7 @@ function fetchQuoteBatch(codes){
   });
 }
 let etfRecoRunning=false, etfRecoAbort=false, etfRecoResults=[];
+const ETF_RECO_LIMIT=100;
 async function etfRecoRun(){
   if(etfRecoRunning) return;
   etfRecoRunning=true; etfRecoAbort=false; etfRecoResults=[];
@@ -811,9 +812,9 @@ async function etfRecoRun(){
     // 打分: 振幅为主 + 当日跌幅加权(跌得多加分, 契合低吸)
     all.forEach(s=>{ s.score=+(s.amp + Math.max(0,-s.chg)*0.3).toFixed(2); s.ind=etfIndustry(s.name); });
     all.sort((a,b)=>b.score-a.score);
-    etfRecoResults=all.slice(0,30);
+    etfRecoResults=all.slice(0,ETF_RECO_LIMIT);
     etfRecoRender();
-    // 对Top30补真实RSI6(逐只拉分时)
+    // 对Top100补真实RSI6(逐只拉分时)
     setSt('计算RSI6中…');
     for(let i=0;i<etfRecoResults.length && !etfRecoAbort;i++){
       const s=etfRecoResults[i];
