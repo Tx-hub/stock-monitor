@@ -322,7 +322,7 @@
     <button id="btnRefresh">立即刷新</button>
     <button id="btnAuto" class="on">自动刷新: 开(每5秒)</button>
     <button id="btnAnalyze">🧠 个股5Agent分析</button>
-    <button id="btnMarketAnalyze">🌐 大盘4Agent盯票</button>
+    <button id="btnMarketAnalyze">🌐 总指挥决策</button>
     <span class="tip">数据源腾讯行情·完整分时·仅供参考不构成投资建议</span>
   </div>
 
@@ -361,9 +361,9 @@
   </div>
 
   <div class="panel" id="analysisPanel">
-    <h2 id="anaHead" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">🧠 AI分析：个股5Agent + 大盘4Agent <span id="anaArrow" style="transition:transform .2s;color:#8a94a6">▾</span></h2>
+    <h2 id="anaHead" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">🧠 AI分析：个股5Agent + 大盘总指挥 <span id="anaArrow" style="transition:transform .2s;color:#8a94a6">▾</span></h2>
     <div id="anaFold">
-    <div class="ana-hint" id="anaHint">「个股5Agent」分析当前标的做T/波段；「大盘4Agent」使用野人、博哥、义水三个框架 + 汇总Agent，从已有扫描/推荐结果里告诉你重点关注哪些票。</div>
+    <div class="ana-hint" id="anaHint">「个股5Agent」分析当前标的做T/波段；「总指挥决策」内部按博哥情绪→野人风控→义哥核验三框架合体裁决，从已有扫描/推荐结果里给大盘战况与关注票。</div>
     <div id="anaBody"></div>
     <div class="ana-disc">⚠️ 以上为AI生成的多智能体研判，仅供参考，不构成投资建议。市场有风险，决策需谨慎。</div>
     </div>
@@ -1952,16 +1952,54 @@ const STOCK_AGENTS = [
     sys:'你是风控。审查交易员的两套方案, 分别给出【做T】和【波段】的最终可执行建议, 各标注风险等级(低/中/高)和建议仓位比例。180字内。结尾用一句话提示"仅供参考,不构成投资建议"。' }
 ];
 
-// 大盘4Agent：负责从扫描/推荐结果里选关注票
+// 大盘总指挥：三框架合体单Agent，负责从扫描/推荐结果里做统一裁决
 const MARKET_AGENTS = [
-  { key:'m_yeren', role:'🧭 野人框架Agent', badge:'环境/结构', cls:'',
-    sys:'你使用“全能的野人交易框架”。基于全市场扫描/ETF推荐/策略池结果，按 市场环境→板块题材→个股结构→触发与失效→风险预算 筛出最值得关注的1-3只票。候选不等于买点，必须给触发条件和失效条件。220字内, 不要免责声明。' },
-  { key:'m_boge', role:'🔥 博哥短线Agent', badge:'主线/梯队', cls:'role-bull',
-    sys:'你使用“东风西路博哥短线框架”。顺序固定: 环境定仓位, 主线定方向, 核心定锚点, 梯队定节奏, 盘口定买卖。基于候选池判断今天重点盯哪些方向/哪些票，输出可交易/仅观察/回避、观察锚、盘口确认和仓位上限。240字内, 不要免责声明。' },
-  { key:'m_yishui', role:'🌊 义水复盘Agent', badge:'弱转强/参照', cls:'role-bear',
-    sys:'你使用“义水北路交易复盘框架”。从候选池中按 环境判断→参照关系→条件核验→风险测算→退出预案 筛票。重点看主动核心、弱转强有效性、参照股是否支持。输出“优先关注/仅观察/放弃”及确认和证伪条件。240字内, 不要免责声明。' },
-  { key:'m_summary', role:'🧠 汇总盯票Agent', badge:'总名单', cls:'role-trader',
-    sys:'你是最终汇总Agent。综合前三个策略Agent，输出今天/下一交易日最该关注的票。必须给: 【优先级1-5】每只票名称代码；【为什么盯】；【触发再看/触发才做】；【放弃条件】；【适合做T/短线/波段】。若数据不足，明确建议先重扫哪些策略。280字内。结尾提示“仅供参考，不构成投资建议”。' }
+  { key:'commander', role:'🎯 总指挥决策Agent', badge:'三框架裁决', cls:'role-trader',
+    sys:`你是涂枭的【A股盘中总指挥】，脑子里装着三套已验证的交易框架，依次站在三个视角分析，再统一拍板：
+
+情绪官·博哥（dongfengxilu-short-trading）：环境→主线→核心→梯队→盘口，数板、看高标反馈、判情绪阶段。
+风控官·野人（yeren-trading-framework）：算盈亏比与仓位，是刹车；盈亏比<2 否决，环境不支持就不做。
+核验官·义哥（yishui-trade-review）：六条件打勾（环境适配/修复证据/候选质量/参照确认/价格时间/风险规则），任一硬伤否决。
+
+三派冲突时执行一票否决偏保守 + 仓位取三家最小值。宁可错过，不可大亏。你是唯一对涂枭发言的人，简洁中文，适合飞书阅读。
+
+铁律：
+1. 必须基于本次输入的最新候选池/扫描结果重跑，不复用旧结论。
+2. 数据源不足的涨停数、封板率、封单量、板块强度写“待核验”，不得编造；HTTP成功≠实时。
+3. 分清行情事实、框架原意、你的推断、演示参数。
+4. 每个候选必须给角色、触发、失效、仓位上限；不到触发一律写“不触发/观察”。
+5. 情绪连板票看盘口梯队，不左侧；趋势容量票看均线回踩，不追高不接飞刀；超跌≠见底，便宜≠该买。
+6. 仓位硬约束：单笔风险≤净值0.5%、单题材≤1%；高标接力减半；单日连亏两笔关机；不补仓、不把短线改长线。
+7. 只做研究与条件计划：不下单、不代客操作、不承诺收益。
+
+分析流程：
+1. 取数快照：优先使用输入中的候选池、策略扫描、ETF推荐、自选观察；五大指数/成交额/涨停跌停/炸板/封板率/连板梯队缺失则标“待核验”。
+2. 环境打分(博哥)：指数/情绪/主线/量能各 -1/0/+1；判阶段(启动/发酵/分歧/修复/退潮)与风格。
+3. 主线与背离：最多2条主线，看叙事/标杆/广度/容量；点破“小票连板强 vs 容量大票弱”等背离。
+4. 梯队盘口：最高板几进几、中位断层、同高度前辈成败；缺数据写待核验。
+5. 逐票核验：义哥六条件；野人公式 Q=(E×r)/(P−S+往返成本) 只在资金/价位足够时演示，否则给仓位上限。
+6. 裁决：按矩阵出军令与路径A/B。
+
+固定输出骨架：
+📊 A股[盘中/收盘]复盘 & 交易计划
+交易日：YYYY-MM-DD（周X）｜数据截至 HH:MM
+【一句话结论】结构+今天基准(空仓/可轻仓)+核心动作
+一、今日环境（指数/情绪/主线/量能评分表，合计X，属XX阶段，背离要点）
+二、梯队&盘口（纯连板梯队、关键个股盘口定性、高标警示）
+三、候选与规则（默认空仓；每个：✅触发须同时满足 / ❌失效 / 仓位%；只观察；禁止买入）
+四、两套预案（🟢A超预期→动作 / 🔴B默认空仓→不接飞刀不追末段）
+说明：数据来源、口径、非投资建议盈亏自负
+
+裁决矩阵：
+博哥退潮/不接力 + 野人不做 + 义哥不通过 = 空仓。
+可接力但盈亏比<2 = 放弃(风控否决)。
+情绪强但六条件硬伤 = 观察(质检否决)。
+可做且盈亏比≥2且六条件全过 = 可操作，仓位取最小。
+信息不足 = 仅观察等数据。
+
+盘中问战况：重拉当前输入快照，不复读；先一句话军令(做/看/空仓，A还是B)再依据；问单票先判情绪/趋势，明确状态(未触发/待确认/已过期/可评估)；短、给条件、给红线。
+
+最后必须附：仅供参考，不构成投资建议。` }
 ];
 
 function anaMakeBlock(a){
@@ -2055,17 +2093,17 @@ async function runMarketAnalysis(){
   const btn=document.getElementById('btnMarketAnalyze');
   const md=collectMarketOverview();
   if(!md){ document.getElementById('anaHint').textContent='⏳ 暂无候选池数据，请先在股票池生成ETF推荐，或在选股策略里扫描一次。'; return; }
-  analyzing=true; btn.disabled=true; btn.textContent='🌐 大盘盯票中…';
+  analyzing=true; btn.disabled=true; btn.textContent='🎯 总指挥研判中…';
   const sbtn=document.getElementById('btnAnalyze'); if(sbtn) sbtn.disabled=true;
   document.getElementById('anaHint').style.display='none';
   const body=document.getElementById('anaBody'); body.innerHTML='';
-  let context='以下是当前网页已有的候选池/扫描结果，请从大盘和短线框架角度筛出重点关注票：\n'+md+'\n\n';
+  let context='以下是当前网页已有的候选池/扫描结果，请按“总指挥决策Agent · 三框架合体单Agent版”输出大盘战况、候选裁决和交易计划：\n'+md+'\n\n';
   try{
     for(const a of MARKET_AGENTS){
       const block=anaMakeBlock(a); body.appendChild(block);
       block.classList.add('running');
       const txtEl=document.getElementById('ana-'+a.key);
-      const input=context+(a.key==='m_summary'?'请综合前三个策略Agent观点，给出最终重点关注名单。':'请按你的框架筛出重点关注方向和票。');
+      const input=context+'请严格按固定输出骨架给出唯一裁决结论。';
       let out='';
       out=await callArkStream(a.sys, input, delta=>{ txtEl.textContent+=delta; txtEl.scrollIntoView({block:'nearest'}); });
       block.classList.remove('running');
@@ -2075,7 +2113,7 @@ async function runMarketAnalysis(){
     const err=document.createElement('div'); err.className='ana-hint'; err.style.color='#d63a4d';
     err.textContent='❌ 分析出错: '+e.message; body.appendChild(err);
   }finally{
-    analyzing=false; btn.disabled=false; btn.textContent='🌐 大盘4Agent盯票';
+    analyzing=false; btn.disabled=false; btn.textContent='🌐 总指挥决策';
     if(sbtn) sbtn.disabled=false;
   }
 }
