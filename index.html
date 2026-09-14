@@ -321,7 +321,8 @@
   <div class="ctrl" id="ctrlBar">
     <button id="btnRefresh">立即刷新</button>
     <button id="btnAuto" class="on">自动刷新: 开(每5秒)</button>
-    <button id="btnAnalyze">🧠 四Agent策略分析</button>
+    <button id="btnAnalyze">🧠 个股5Agent分析</button>
+    <button id="btnMarketAnalyze">🌐 大盘4Agent盯票</button>
     <span class="tip">数据源腾讯行情·完整分时·仅供参考不构成投资建议</span>
   </div>
 
@@ -360,9 +361,9 @@
   </div>
 
   <div class="panel" id="analysisPanel">
-    <h2 id="anaHead" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">🧠 三框架 + 汇总Agent 深度分析 <span id="anaArrow" style="transition:transform .2s;color:#8a94a6">▾</span></h2>
+    <h2 id="anaHead" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">🧠 AI分析：个股5Agent + 大盘4Agent <span id="anaArrow" style="transition:transform .2s;color:#8a94a6">▾</span></h2>
     <div id="anaFold">
-    <div class="ana-hint" id="anaHint">点击上方「四Agent策略分析」，野人框架、东风西路博哥框架、义水北路复盘框架将分别研判，最后由汇总Agent给出【做T】和【波段】执行建议。</div>
+    <div class="ana-hint" id="anaHint">「个股5Agent」分析当前标的做T/波段；「大盘4Agent」使用野人、博哥、义水三个框架 + 汇总Agent，从已有扫描/推荐结果里告诉你重点关注哪些票。</div>
     <div id="anaBody"></div>
     <div class="ana-disc">⚠️ 以上为AI生成的多智能体研判，仅供参考，不构成投资建议。市场有风险，决策需谨慎。</div>
     </div>
@@ -1937,16 +1938,30 @@ function collectMarketData(){
 【规则引擎信号】${sgTxt}`;
 }
 
-// 4个Agent角色定义：三个已安装Skill策略 + 一个汇总Agent
-const ANA_AGENTS = [
-  { key:'yeren', role:'🧭 野人框架Agent', badge:'环境/结构', cls:'',
-    sys:'你使用“全能的野人交易框架”。按 市场环境→板块/题材→个股结构→触发与失效→风险预算 分析给定标的。重点区分候选与买点、短线与波段、事前条件与事后结果。输出: ①当前是否满足观察/交易条件 ②做T触发位/失效位 ③波段触发位/失效位。220字内, 不要免责声明。' },
-  { key:'boge', role:'🔥 博哥短线Agent', badge:'主线/梯队', cls:'role-bull',
-    sys:'你使用“东风西路博哥短线框架”。顺序固定: 环境定仓位, 主线定方向, 核心定锚点, 梯队定节奏, 盘口定买卖。基于给定数据判断是情绪短线、趋势容量还是仅观察；给出可交易/仅观察/回避、仓位上限、盘口确认条件和失效条件。220字内, 不要免责声明。' },
-  { key:'yishui', role:'🌊 义水复盘Agent', badge:'弱转强/参照', cls:'role-bear',
-    sys:'你使用“义水北路交易复盘框架”。按 环境判断→参照关系→条件核验→风险测算→退出预案 分析。重点核验弱转强是否有效、候选是否主动而非被动跟涨、参照股/竞争方向是否支持。输出“已满足/未满足/信息不足”三态和确认/证伪预案。240字内, 不要免责声明。' },
-  { key:'summary', role:'🧠 汇总决策Agent', badge:'总策略', cls:'role-trader',
-    sys:'你是最终汇总Agent。综合前三个策略Agent意见，只输出可执行结论。必须包含: 【一致结论】做T正T/倒T/观望；【关键价位】低吸/高抛/止损或放弃条件；【波段】建仓/持有/观望/离场+周期；【分歧处理】若三个框架冲突按更保守方案；【仓位】轻/中/重及理由。260字内。结尾提示“仅供参考，不构成投资建议”。' }
+// 个股5Agent：负责当前标的做T/波段
+const STOCK_AGENTS = [
+  { key:'tech', role:'📊 技术分析师', badge:'技术面', cls:'',
+    sys:'你是资深A股技术分析师。基于给定数据做客观解读, 分两个级别: (1)日内盘面(量价/均价VWAP/RSI6/五档/分时); (2)日K级别(近期区间位置/MA5-10-20多空排列/趋势阶段)。判断多空力量、支撑压力、量能。语言简洁专业, 220字内, 不要免责声明。' },
+  { key:'bull', role:'🐂 多头研究员', badge:'看多', cls:'role-bull',
+    sys:'你是偏多头的研究员。基于技术面, 分别给出:(1)日内做T(正T)的低吸理由与区间;(2)波段做多的理由(趋势/位置/题材)与建仓区间。150字内, 观点鲜明, 不要免责声明。' },
+  { key:'bear', role:'🐻 空头研究员', badge:'看空', cls:'role-bear',
+    sys:'你是偏空头的研究员。基于技术面, 分别指出:(1)日内做T的风险与倒T点;(2)波段层面的风险(趋势转弱/高位/破位)与需回避的信号。150字内, 观点鲜明, 不要免责声明。' },
+  { key:'trader', role:'💼 交易员', badge:'决策', cls:'role-trader',
+    sys:'你是交易员。综合多空观点, 输出两套明确方案。\n【做T】日内方向(正T/倒T/观望)+低吸价/高抛价/止损价。\n【波段】方向(建仓/持有/观望/离场)+买入区间/目标位/止损位+预期持有周期(自判: 短波数天~2周 或 中波2周~数月, 说明依据)+离场信号。用要点列出, 220字内, 不要免责声明。' },
+  { key:'risk', role:'🛡️ 风控', badge:'风控', cls:'role-risk',
+    sys:'你是风控。审查交易员的两套方案, 分别给出【做T】和【波段】的最终可执行建议, 各标注风险等级(低/中/高)和建议仓位比例。180字内。结尾用一句话提示"仅供参考,不构成投资建议"。' }
+];
+
+// 大盘4Agent：负责从扫描/推荐结果里选关注票
+const MARKET_AGENTS = [
+  { key:'m_yeren', role:'🧭 野人框架Agent', badge:'环境/结构', cls:'',
+    sys:'你使用“全能的野人交易框架”。基于全市场扫描/ETF推荐/策略池结果，按 市场环境→板块题材→个股结构→触发与失效→风险预算 筛出最值得关注的1-3只票。候选不等于买点，必须给触发条件和失效条件。220字内, 不要免责声明。' },
+  { key:'m_boge', role:'🔥 博哥短线Agent', badge:'主线/梯队', cls:'role-bull',
+    sys:'你使用“东风西路博哥短线框架”。顺序固定: 环境定仓位, 主线定方向, 核心定锚点, 梯队定节奏, 盘口定买卖。基于候选池判断今天重点盯哪些方向/哪些票，输出可交易/仅观察/回避、观察锚、盘口确认和仓位上限。240字内, 不要免责声明。' },
+  { key:'m_yishui', role:'🌊 义水复盘Agent', badge:'弱转强/参照', cls:'role-bear',
+    sys:'你使用“义水北路交易复盘框架”。从候选池中按 环境判断→参照关系→条件核验→风险测算→退出预案 筛票。重点看主动核心、弱转强有效性、参照股是否支持。输出“优先关注/仅观察/放弃”及确认和证伪条件。240字内, 不要免责声明。' },
+  { key:'m_summary', role:'🧠 汇总盯票Agent', badge:'总名单', cls:'role-trader',
+    sys:'你是最终汇总Agent。综合前三个策略Agent，输出今天/下一交易日最该关注的票。必须给: 【优先级1-5】每只票名称代码；【为什么盯】；【触发再看/触发才做】；【放弃条件】；【适合做T/短线/波段】。若数据不足，明确建议先重扫哪些策略。280字内。结尾提示“仅供参考，不构成投资建议”。' }
 ];
 
 function anaMakeBlock(a){
@@ -1956,22 +1971,67 @@ function anaMakeBlock(a){
   return div;
 }
 
+function fmtAnaCandidate(s){
+  if(!s) return '';
+  const parts=[(s.name||'—')+' '+String(s.code||'').toUpperCase()];
+  if(s.close!=null) parts.push('价'+s.close);
+  else if(s.price!=null) parts.push('价'+s.price);
+  if(s.chg!=null) parts.push('涨跌'+(s.chg>0?'+':'')+s.chg+'%');
+  if(s.score!=null) parts.push('分'+s.score);
+  if(s.amp!=null) parts.push('振'+s.amp+'%');
+  if(s.rsi6!=null) parts.push('RSI6 '+s.rsi6);
+  if(s.pullbackDays!=null) parts.push('回调'+s.pullbackDays+'天');
+  if(s.support!=null) parts.push('支撑'+s.support);
+  if(s.trigger!=null) parts.push('触发'+s.trigger);
+  if(s.lbc!=null) parts.push('连'+s.lbc+'板');
+  if(s.bk) parts.push('板块'+s.bk);
+  if(s.ind) parts.push('行业'+s.ind);
+  return parts.join(' · ');
+}
+
+function collectMarketOverview(){
+  const all=loadStrats();
+  const lines=[];
+  const add=(key,label,n)=>{
+    const c=all[key];
+    if(c&&c.list&&c.list.length){
+      lines.push('【'+label+'】'+c.date+' · '+c.list.length+'只');
+      c.list.slice(0,n||8).forEach((s,i)=>lines.push((i+1)+'. '+fmtAnaCandidate(s)));
+    }
+  };
+  add('etf_reco','T+0 ETF智能推荐',12);
+  add('ltprob','龙头概率',8);
+  add('dreamer','大A梦想家',8);
+  add('jiyin','极阴尾排',8);
+  add('longtou','龙头回踩',8);
+  add('fanbao','反包',8);
+  if(watchList&&watchList.length){
+    lines.push('【自选观察】'+watchList.length+'只');
+    watchList.slice(0,12).forEach((s,i)=>{
+      const q=listQuotes[s.code]||{};
+      lines.push((i+1)+'. '+fmtAnaCandidate({...s, price:q.price, chg:q.chg, rsi6:q.rsi6}));
+    });
+  }
+  return lines.length ? lines.join('\n') : null;
+}
+
 async function runDeepAnalysis(){
   if(analyzing) return;
   const btn=document.getElementById('btnAnalyze');
   if((!kBars || !kBars.length) && typeof loadKChart==='function'){ try{ await loadKChart(); }catch(e){} }  // 波段需日K, 兜底拉一次
   const md=collectMarketData();
   if(!md){ document.getElementById('anaHint').textContent='⏳ 行情/分时尚未加载完成, 请稍候再试(切到盯盘视图等数据出来)。'; return; }
-  analyzing=true; btn.disabled=true; btn.textContent='🧠 分析中…';
+  analyzing=true; btn.disabled=true; btn.textContent='🧠 个股分析中…';
+  const mbtn=document.getElementById('btnMarketAnalyze'); if(mbtn) mbtn.disabled=true;
   document.getElementById('anaHint').style.display='none';
   const body=document.getElementById('anaBody'); body.innerHTML='';
   let context='以下是该标的的实时盘面技术数据:\n'+md+'\n\n';
   try{
-    for(const a of ANA_AGENTS){
+    for(const a of STOCK_AGENTS){
       const block=anaMakeBlock(a); body.appendChild(block);
       block.classList.add('running');
       const txtEl=document.getElementById('ana-'+a.key);
-      const input = context + (a.key==='summary'? '请综合前三个策略Agent观点, 给出最终总策略。' : '请按你的框架给出策略分析。');
+      const input = context + (a.key==='tech'? '请开始你的技术面分析。' : '请基于以上信息与前面各方观点, 给出你的意见。');
       let out='';
       out = await callArkStream(a.sys, input, (delta)=>{
         txtEl.textContent+=delta;
@@ -1984,10 +2044,42 @@ async function runDeepAnalysis(){
     const err=document.createElement('div'); err.className='ana-hint'; err.style.color='#d63a4d';
     err.textContent='❌ 分析出错: '+e.message; body.appendChild(err);
   }finally{
-    analyzing=false; btn.disabled=false; btn.textContent='🧠 四Agent策略分析';
+    analyzing=false; btn.disabled=false; btn.textContent='🧠 个股5Agent分析';
+    if(mbtn) mbtn.disabled=false;
   }
 }
 document.getElementById('btnAnalyze').onclick=runDeepAnalysis;
+
+async function runMarketAnalysis(){
+  if(analyzing) return;
+  const btn=document.getElementById('btnMarketAnalyze');
+  const md=collectMarketOverview();
+  if(!md){ document.getElementById('anaHint').textContent='⏳ 暂无候选池数据，请先在股票池生成ETF推荐，或在选股策略里扫描一次。'; return; }
+  analyzing=true; btn.disabled=true; btn.textContent='🌐 大盘盯票中…';
+  const sbtn=document.getElementById('btnAnalyze'); if(sbtn) sbtn.disabled=true;
+  document.getElementById('anaHint').style.display='none';
+  const body=document.getElementById('anaBody'); body.innerHTML='';
+  let context='以下是当前网页已有的候选池/扫描结果，请从大盘和短线框架角度筛出重点关注票：\n'+md+'\n\n';
+  try{
+    for(const a of MARKET_AGENTS){
+      const block=anaMakeBlock(a); body.appendChild(block);
+      block.classList.add('running');
+      const txtEl=document.getElementById('ana-'+a.key);
+      const input=context+(a.key==='m_summary'?'请综合前三个策略Agent观点，给出最终重点关注名单。':'请按你的框架筛出重点关注方向和票。');
+      let out='';
+      out=await callArkStream(a.sys, input, delta=>{ txtEl.textContent+=delta; txtEl.scrollIntoView({block:'nearest'}); });
+      block.classList.remove('running');
+      context+=a.role+'的结论: '+out+'\n\n';
+    }
+  }catch(e){
+    const err=document.createElement('div'); err.className='ana-hint'; err.style.color='#d63a4d';
+    err.textContent='❌ 分析出错: '+e.message; body.appendChild(err);
+  }finally{
+    analyzing=false; btn.disabled=false; btn.textContent='🌐 大盘4Agent盯票';
+    if(sbtn) sbtn.disabled=false;
+  }
+}
+document.getElementById('btnMarketAnalyze').onclick=runMarketAnalysis;
 // 深度分析面板折叠(全端可用)
 document.getElementById('anaHead').addEventListener('click', ()=>{
   const fold=document.getElementById('anaFold'), arr=document.getElementById('anaArrow');
