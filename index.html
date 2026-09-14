@@ -1167,7 +1167,7 @@ async function jiyinKlineN(code, count){
   return null;
 }
 
-// 大A梦想家 市场过滤: 沪深300收盘>MA20 且 MA20>5日前MA20
+// 大A梦想家 市场提示: 沪深300收盘>MA20 且 MA20>5日前MA20（仅提示，不拦截扫描）
 async function dreamerMarketFilter(){
   try{
     const bars=await jiyinKlineN('sh000300', 80);
@@ -1184,6 +1184,7 @@ async function dreamerMarketFilter(){
 async function jiyinScan(){
   if(jiyinScanning) return;
   const cfg=STRATS[curStrat];
+  let marketNote='';
   jiyinScanning=true; jiyinAbort=false; jiyinResults=[];
   document.getElementById('btnJiyinScan').style.display='none';
   document.getElementById('btnJiyinStop').style.display='';
@@ -1204,18 +1205,23 @@ async function jiyinScan(){
       }
       return;
     }
-    // 大A梦想家: 先查市场过滤
+    // 大A梦想家: 先查市场状态，仅提示，不阻断扫描
     if(curStrat==='dreamer'){
       jiyinSetStatus('检测沪深300趋势…');
       const mkt=await dreamerMarketFilter();
-      if(!mkt.ok){ jiyinSetStatus('市场过滤不通过: '+mkt.reason+' — 暂不扫描（顺势而为）'); return; }
-      jiyinSetStatus('市场过滤通过（沪深300站上MA20且上行），开始扫描…');
+      if(!mkt.ok){
+        marketNote='市场提示: '+mkt.reason+'；';
+        jiyinSetStatus(marketNote+'不拦截，继续扫描…');
+      }else{
+        marketNote='市场提示: 沪深300站上MA20且MA20上行；';
+        jiyinSetStatus(marketNote+'开始扫描…');
+      }
     }
-    jiyinSetStatus('拉取全市场主板列表…');
+    jiyinSetStatus(marketNote+'拉取全市场主板列表…');
     const uni=await jiyinUniverse();
     if(jiyinAbort){ jiyinSetStatus('已停止'); return; }
     const total=uni.length; let done=0, miss=0;
-    jiyinSetStatus('开始扫描 '+total+' 只…');
+    jiyinSetStatus(marketNote+'开始扫描 '+total+' 只…');
     const CHUNK=10;
     for(let i=0;i<uni.length && !jiyinAbort;i+=CHUNK){
       const batch=uni.slice(i,i+CHUNK);
@@ -1236,15 +1242,15 @@ async function jiyinScan(){
         }
       }));
       done+=batch.length;
-      jiyinSetStatus('扫描中 '+Math.min(done,total)+'/'+total+'，命中 '+jiyinResults.length+'，缺失 '+miss);
+      jiyinSetStatus(marketNote+'扫描中 '+Math.min(done,total)+'/'+total+'，命中 '+jiyinResults.length+'，缺失 '+miss);
       await new Promise(r=>setTimeout(r,120));
     }
     if(jiyinAbort){ jiyinSetStatus('已停止，已扫 '+done+'/'+total+'，命中 '+jiyinResults.length); }
     jiyinResults.sort((a,b)=>b.score-a.score);
     jiyinRender();
     if(!jiyinAbort){
-      if(jiyinResults.length){ const t1=jiyinResults[0]; jiyinSetStatus('完成！命中 '+jiyinResults.length+' 只。Top1: '+t1.name+' '+t1.code.toUpperCase()); }
-      else jiyinSetStatus('完成，今日无满足该策略的个股');
+      if(jiyinResults.length){ const t1=jiyinResults[0]; jiyinSetStatus(marketNote+'完成！命中 '+jiyinResults.length+' 只。Top1: '+t1.name+' '+t1.code.toUpperCase()); }
+      else jiyinSetStatus(marketNote+'完成，今日无满足该策略的个股');
       saveStratResult(curStrat, jiyinResults);  // 保存结果到云端(隔日仍可看)
     }
   }catch(e){ jiyinSetStatus('扫描出错: '+e.message); }
