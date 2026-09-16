@@ -799,6 +799,29 @@ let etfRecoRunning=false, etfRecoAbort=false, etfRecoResults=[];
 let etfAgentRunning=false;
 let etfRecoSort='score';  // score | rsiAsc
 const ETF_RECO_LIMIT=100;
+function etfMinuteVolStats(prices, quoteAmp){
+  const arr=(prices||[]).map(Number).filter(x=>x>0 && isFinite(x));
+  if(arr.length<2) return null;
+  const base=arr[0], hi=Math.max(...arr), lo=Math.min(...arr);
+  const minuteAmp=base>0 ? (hi-lo)/base*100 : 0;
+  let pathVol=0, reversals=0, lastDir=0;
+  for(let i=1;i<arr.length;i++){
+    const prev=arr[i-1], cur=arr[i];
+    if(!(prev>0) || !(cur>0)) continue;
+    const diff=cur-prev;
+    pathVol+=Math.abs(diff)/prev*100;
+    const dir=diff>0?1:(diff<0?-1:0);
+    if(dir && lastDir && dir!==lastDir) reversals++;
+    if(dir) lastDir=dir;
+  }
+  // 用分钟收盘轨迹重算“可做T波动”：真实日内高低差为主，路径摆动为辅；路径贡献封顶，避免微小来回抖动被误判成可交易波动。
+  const qAmp=quoteAmp>0 ? quoteAmp : minuteAmp;
+  const cappedPath=minuteAmp>0 ? Math.min(pathVol, minuteAmp*2.2) : 0;
+  const effVol=Math.max(0, Math.min(qAmp || 0, minuteAmp*0.7 + cappedPath*0.3));
+  const ratio=qAmp>0 ? effVol/qAmp : 1;
+  const loomLevel=(!qAmp || qAmp<1) ? '低' : ((ratio<0.35 || effVol<0.45) ? '高' : ((ratio<0.55 || effVol<0.75) ? '中' : '低'));
+  return {minuteAmp:+minuteAmp.toFixed(2), pathVol:+pathVol.toFixed(2), effVol:+effVol.toFixed(2), effRatio:+ratio.toFixed(2), loomLevel, reversals};
+}
 async function etfRecoRun(){
   if(etfRecoRunning) return;
   etfRecoRunning=true; etfRecoAbort=false; etfRecoResults=[];
@@ -826,17 +849,20 @@ async function etfRecoRun(){
     all.sort((a,b)=>b.score-a.score);
     etfRecoResults=all.slice(0,ETF_RECO_LIMIT);
     etfRecoRender();
-    // 对Top100补真实RSI6(逐只拉分时)
-    setSt('计算RSI6中…');
+    // 对Top100补真实RSI6和分钟级有效波动(过滤“织布机”假振幅)
+    setSt('计算RSI6/有效波动中…');
     for(let i=0;i<etfRecoResults.length && !etfRecoAbort;i++){
       const s=etfRecoResults[i];
       try{ const prices=await loadMinuteByCode(s.code);
-        if(prices && prices.length>1){ const rr=calcRSI(prices,6); const last=[...rr].reverse().find(v=>v!=null); if(last!=null) s.rsi6=+last.toFixed(0); }
+        if(prices && prices.length>1){
+          const rr=calcRSI(prices,6); const last=[...rr].reverse().find(v=>v!=null); if(last!=null) s.rsi6=+last.toFixed(0);
+          Object.assign(s, etfMinuteVolStats(prices, s.amp)||{});
+        }
       }catch(e){}
       if(i%5===4){ etfRecoRender(); await new Promise(r=>setTimeout(r,50)); }
     }
     etfRecoRender();
-    if(!etfRecoAbort){ setSt('完成！从'+all.length+'只有效ETF按振幅推荐Top'+etfRecoResults.length+'(含RSI6·行业分组) · '+new Date().toISOString().slice(0,10)); saveStratResult('etf_reco', etfRecoResults); }
+    if(!etfRecoAbort){ setSt('完成！从'+all.length+'只有效ETF按振幅推荐Top'+etfRecoResults.length+'(含RSI6·有效波动·织布机过滤) · '+new Date().toISOString().slice(0,10)); saveStratResult('etf_reco', etfRecoResults); }
   }catch(e){ setSt('出错: '+e.message); }
   finally{
     etfRecoRunning=false;
@@ -877,9 +903,11 @@ function etfRecoAppendItem(box, s){
   const inW=watchList.some(x=>x.code===s.code);
   const cls=s.chg>0?'up':(s.chg<0?'down':'flat');
   const rsiTxt=(s.rsi6!=null)?' R'+s.rsi6:'';
+  const effTxt=(s.effVol!=null)?' 有'+s.effVol.toFixed(1):'';
+  const loomTxt=(s.loomLevel && s.loomLevel!=='低')?' · 织布'+s.loomLevel:'';
   div.innerHTML=
-    '<div style="flex:1;min-width:0"><div class="pi-name">'+s.name+'</div><div class="pi-code">'+s.code.toUpperCase()+' · 换手'+s.turn+'%</div></div>'+
-    '<div class="pi-right"><div class="pi-price '+cls+'">'+s.price.toFixed(3)+'</div><div class="pi-sub '+cls+'">'+(s.chg>0?'+':'')+s.chg.toFixed(2)+'% <span class="pi-score">振'+s.amp.toFixed(1)+rsiTxt+'</span></div></div>'+
+    '<div style="flex:1;min-width:0"><div class="pi-name">'+s.name+'</div><div class="pi-code">'+s.code.toUpperCase()+' · 换手'+s.turn+'%'+loomTxt+'</div></div>'+
+    '<div class="pi-right"><div class="pi-price '+cls+'">'+s.price.toFixed(3)+'</div><div class="pi-sub '+cls+'">'+(s.chg>0?'+':'')+s.chg.toFixed(2)+'% <span class="pi-score">振'+s.amp.toFixed(1)+effTxt+rsiTxt+'</span></div></div>'+
     '<span class="pi-add'+(inW?' added':'')+'">'+(inW?'✓':'＋')+'</span>';
   div.addEventListener('click', e=>{ if(e.target.classList.contains('pi-add'))return; switchStock(s.code); });
   div.querySelector('.pi-add').addEventListener('click', e=>{ e.stopPropagation(); addFromPool(s); });
@@ -893,18 +921,21 @@ function etfAgentLoadCandidates(){
   return [];
 }
 function etfTScore(s){
-  const rsi=s.rsi6, amp=s.amp||0, chg=s.chg||0, turn=s.turn||0;
+  const rsi=s.rsi6, amp=s.amp||0, eff=(s.effVol!=null?s.effVol:amp), chg=s.chg||0, turn=s.turn||0;
   if(rsi==null) return -1e9;
-  return +(amp*1.25 + Math.max(0,35-rsi)*0.18 + Math.max(0,-chg)*0.25 + Math.min(turn,40)*0.015).toFixed(2);
+  if(s.loomLevel==='高' || eff<0.55) return -1e9;
+  const loomPenalty=s.loomLevel==='中'?1.2:0;
+  return +(eff*1.8 + Math.min(amp, eff*1.5)*0.45 + Math.max(0,35-rsi)*0.18 + Math.max(0,-chg)*0.25 + Math.min(turn,40)*0.015 - loomPenalty).toFixed(2);
 }
 function etfAgentFallback(list){
   const top=list.slice(0,3);
-  if(!top.length) return '当前没有带 RSI6 的 ETF 推荐结果。请先点「生成今日推荐」，等 RSI6 计算完成后再运行 ETF做T Agent。';
-  const lines=['【ETF做T Agent】优先找 RSI6低 + 当日振幅大 + 流动性够的 T+0 ETF：'];
+  if(!top.length) return '当前没有带 RSI6/有效波动 的 ETF 推荐结果。请先点「生成今日推荐」，等 RSI6/有效波动计算完成后再运行 ETF做T Agent。';
+  const lines=['【ETF做T Agent】优先找 RSI6低 + 有效波动高 + 流动性够的 T+0 ETF；已过滤“名义振幅大但分时像织布机”的标的：'];
   top.forEach((s,i)=>{
-    const low=Math.max(s.price*0.992, s.price-(s.amp||0)/100*s.price*0.35);
-    const high=Math.min(s.price*1.01, s.price+(s.amp||0)/100*s.price*0.35);
-    lines.push((i+1)+'. '+s.name+' '+s.code.toUpperCase()+'｜RSI6 '+s.rsi6+'｜振幅'+s.amp+'%｜涨跌'+(s.chg>0?'+':'')+s.chg+'%｜策略分'+s.tscore+'｜回踩观察 '+low.toFixed(3)+' 附近，冲高参考 '+high.toFixed(3)+'，跌破日内低点不收回放弃');
+    const eff=s.effVol!=null?s.effVol:s.amp;
+    const low=Math.max(s.price*0.992, s.price-eff/100*s.price*0.35);
+    const high=Math.min(s.price*1.01, s.price+eff/100*s.price*0.35);
+    lines.push((i+1)+'. '+s.name+' '+s.code.toUpperCase()+'｜RSI6 '+s.rsi6+'｜名义振幅'+s.amp+'%｜有效波动'+eff+'%｜织布机风险'+(s.loomLevel||'低')+'｜涨跌'+(s.chg>0?'+':'')+s.chg+'%｜策略分'+s.tscore+'｜回踩观察 '+low.toFixed(3)+' 附近，冲高参考 '+high.toFixed(3)+'，跌破日内低点不收回放弃');
   });
   lines.push('原则：只低吸不追高，单只轻仓做T；仅供参考，不构成投资建议。');
   return lines.join('\n');
@@ -912,12 +943,12 @@ function etfAgentFallback(list){
 async function etfAgentRun(){
   if(etfAgentRunning) return;
   const box=document.getElementById('etfAgentBox'), btn=document.getElementById('btnEtfAgent');
-  const list=etfAgentLoadCandidates().filter(s=>s && s.rsi6!=null && s.amp!=null).map(s=>({...s, tscore:etfTScore(s)})).sort((a,b)=>b.tscore-a.tscore);
+  const list=etfAgentLoadCandidates().filter(s=>s && s.rsi6!=null && s.amp!=null && s.effVol!=null).map(s=>({...s, tscore:etfTScore(s)})).filter(s=>s.tscore>-1e8).sort((a,b)=>b.tscore-a.tscore);
   box.style.display='block'; box.textContent='🧠 ETF做T Agent 分析中…';
   if(!list.length){ box.textContent=etfAgentFallback(list); return; }
-  const rows=list.slice(0,20).map((s,i)=>`${i+1}. ${s.name} ${s.code.toUpperCase()} 价${s.price} 涨跌${s.chg}% 振幅${s.amp}% RSI6=${s.rsi6} 换手${s.turn}% 行业${s.ind||'其他'} 策略分${s.tscore}`).join('\n');
-  const sys='你是ETF日内做T Agent，只从给定T+0 ETF候选里筛选，不编造新标的。目标：找 RSI6较低、当日振幅大、流动性/换手尚可、适合低吸高抛做T的基金。输出必须简洁：第一行给【首选】名称代码；然后给最多3只，格式为 名称代码｜为什么适合做T｜低吸触发｜高抛/止损｜风险。不要建议追高；RSI6越低越优先，但振幅过小不选；涨幅已大且贴近日高时只写等回踩。结尾提示仅供参考不构成投资建议。';
-  const input='以下为当前ETF推荐池按“低RSI+高振幅”预排序的候选：\n'+rows+'\n\n请给出今天最适合做T的T+0 ETF。';
+  const rows=list.slice(0,20).map((s,i)=>`${i+1}. ${s.name} ${s.code.toUpperCase()} 价${s.price} 涨跌${s.chg}% 名义振幅${s.amp}% 有效波动${s.effVol!=null?s.effVol:s.amp}% 分时振幅${s.minuteAmp!=null?s.minuteAmp:'?'}% 路径波动${s.pathVol!=null?s.pathVol:'?'}% 织布机风险${s.loomLevel||'低'} RSI6=${s.rsi6} 换手${s.turn}% 行业${s.ind||'其他'} 策略分${s.tscore}`).join('\n');
+  const sys='你是ETF日内做T Agent，只从给定T+0 ETF候选里筛选，不编造新标的。目标：找 RSI6较低、有效波动高、流动性/换手尚可、适合低吸高抛做T的基金。特别规则：不要只看名义振幅；如果名义振幅高但分钟级有效波动低、分时横盘像“织布机”、或织布机风险为中/高，要降权或剔除。输出必须简洁：第一行给【首选】名称代码；然后给最多3只，格式为 名称代码｜为什么适合做T(必须提有效波动)｜低吸触发｜高抛/止损｜风险。不要建议追高；RSI6越低越优先，但有效波动过小不选；涨幅已大且贴近日高时只写等回踩。结尾提示仅供参考不构成投资建议。';
+  const input='以下为当前ETF推荐池按“低RSI+高有效波动+过滤织布机”预排序的候选：\n'+rows+'\n\n请给出今天最适合做T的T+0 ETF，排除名义振幅虚高但分时走平的标的。';
   etfAgentRunning=true; btn.disabled=true; btn.textContent='🧠 分析中…';
   try{
     box.textContent='';
