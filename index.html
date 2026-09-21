@@ -374,7 +374,7 @@
     </div>
     <div class="sector-layout">
       <div>
-        <div class="pool-tip">左侧选强板块 A：看热度、涨幅、涨停家数、主力净流入；右侧看内部龙头/跟随票 B。</div>
+        <div class="pool-tip">左侧选强板块 A：看热度、涨幅、涨停家数、主力净流入；右侧只看沪深A股主板内部龙头/跟随票 B。</div>
         <div class="sector-list" id="sectorList"></div>
       </div>
       <div>
@@ -384,7 +384,7 @@
             <div class="sector-status" id="sectorSub">会展示板块内部涨幅前排、成交额前排，以及同图相对K线。</div>
           </div>
         </div>
-        <div class="sector-a2b" id="sectorA2B">用法：先确认 A（板块/龙头）持续强，再从同板块 B 候选里找回踩、低位补涨或承接更好的票；A 转弱，B 同步失效。</div>
+        <div class="sector-a2b" id="sectorA2B">用法：先确认 A（板块/主板龙头）持续强，再从同板块主板 B 候选里找回踩、低位补涨或承接更好的票；A 转弱，B 同步失效。</div>
         <div class="leader-grid" id="sectorLeaders"></div>
         <canvas id="sectorKChart"></canvas>
         <div class="sector-legend" id="sectorLegend"></div>
@@ -1058,6 +1058,11 @@ function emToCode(num){
   if(/^[89]/.test(num)) return 'bj'+num;
   return num;
 }
+function isAMainBoard(code){
+  const c=String(code||'').toLowerCase(), n=c.slice(-6);
+  // 只保留沪深A股主板：沪市60、深市00；剔除科创688/689、创业板30/301、北交所8/9、ETF/指数等。
+  return (c.startsWith('sh') && /^60/.test(n)) || (c.startsWith('sz') && /^00/.test(n));
+}
 function fmtMoney(v){
   v=Number(v||0);
   const abs=Math.abs(v);
@@ -1093,8 +1098,10 @@ function renderSectorBoards(){
     div.className='sector-item'+(sectorCur&&sectorCur.f12===b.f12?' active':'');
     div.dataset.code=b.f12;
     const cls=(b.f3||0)>0?'up':((b.f3||0)<0?'down':'flat');
+    const anchorCode=emToCode(b.f140||b.f208||'');
+    const anchor=isAMainBoard(anchorCode) ? ((b.f128||b.f207||'—')+((b.f136!=null)?' '+(b.f136>0?'+':'')+b.f136+'%':'')) : '进板块看主板锚';
     div.innerHTML='<div><div class="sector-name">'+b.f14+' <span class="sector-meta">'+b.typ+'</span></div>'+
-      '<div class="sector-meta">A锚: '+(b.f128||'—')+((b.f136!=null)?' '+(b.f136>0?'+':'')+b.f136+'%':'')+' · 涨/跌 '+(b.f104||0)+'/'+(b.f105||0)+' · 主力 '+fmtMoney(b.f62)+'</div></div>'+
+      '<div class="sector-meta">主板A锚: '+anchor+' · 涨/跌 '+(b.f104||0)+'/'+(b.f105||0)+' · 主力 '+fmtMoney(b.f62)+'</div></div>'+
       '<div class="sector-score '+cls+'">'+((b.f3>0?'+':'')+(b.f3||0).toFixed(2))+'%<small>热度 '+b.heat+'</small></div>';
     div.onclick=()=>selectSector(b);
     box.appendChild(div);
@@ -1107,7 +1114,7 @@ async function loadSectorStocks(board){
     code:emToCode(x.f12), name:x.f14, price:+x.f2, chg:+x.f3, amount:+x.f6, turn:+x.f8,
     high:+x.f15, low:+x.f16, open:+x.f17, pc:+x.f18,
     pos:(x.f15>x.f16 && x.f2>0)?(x.f2-x.f16)/(x.f15-x.f16):0.5
-  })).filter(x=>x.code&&x.price>0);
+  })).filter(x=>x.code&&x.price>0&&isAMainBoard(x.code));
   return sectorStocks;
 }
 function sectorPickB(stocks){
@@ -1118,12 +1125,13 @@ function renderSectorStocks(){
   const title=document.getElementById('sectorTitle'), sub=document.getElementById('sectorSub'), a2b=document.getElementById('sectorA2B'), box=document.getElementById('sectorLeaders');
   if(!sectorCur){ return; }
   title.textContent=sectorCur.f14+' · '+sectorCur.typ;
-  sub.textContent='板块涨幅 '+(sectorCur.f3>0?'+':'')+sectorCur.f3+'% · 涨/跌 '+(sectorCur.f104||0)+'/'+(sectorCur.f105||0)+' · 主力净流入 '+fmtMoney(sectorCur.f62);
+  sub.textContent='板块涨幅 '+(sectorCur.f3>0?'+':'')+sectorCur.f3+'% · 仅显示沪深A股主板成分 · 主力净流入 '+fmtMoney(sectorCur.f62);
   const leaders=sectorStocks.slice(0,6);
   const bs=sectorPickB(sectorStocks);
   const a=leaders[0];
-  a2b.innerHTML='看A做B：A锚看 <b>'+(a?a.name:'—')+'</b> 与板块整体强度；B候选看 '+(bs.length?bs.map(x=>'<b>'+x.name+'</b>').join(' / '):'暂无合格跟随票')+'。只有 A 不破位、板块涨停/上涨家数继续扩散，B 的回踩承接才有意义；A转弱则放弃B。';
+  a2b.innerHTML='看A做B：A锚只看主板 <b>'+(a?a.name:'—')+'</b> 与板块整体强度；主板B候选看 '+(bs.length?bs.map(x=>'<b>'+x.name+'</b>').join(' / '):'暂无合格跟随票')+'。只有 A 不破位、板块涨停/上涨家数继续扩散，B 的回踩承接才有意义；A转弱则放弃B。';
   box.innerHTML='';
+  if(!leaders.length){ box.innerHTML='<div class="pool-tip">该板块当前前排里没有沪深A股主板成分，已过滤科创/创业/北交/ETF。</div>'; }
   leaders.forEach((s,i)=>{
     const cls=s.chg>0?'up':(s.chg<0?'down':'flat');
     const role=i===0?'A锚龙头':(bs.some(x=>x.code===s.code)?'B候选':'前排观察');
