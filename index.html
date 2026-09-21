@@ -89,6 +89,7 @@
   #rsiChart { width:100%; height:100px; display:block; background:#fbfcfe; border-radius:6px; border:1px solid #eef1f5; }
   #kchart { width:100%; height:200px; display:block; background:#fbfcfe; border-radius:6px; border:1px solid #eef1f5; }
   #kvol { width:100%; height:80px; display:block; background:#fbfcfe; border-radius:6px; border:1px solid #eef1f5; margin-top:4px; }
+  #sectorKChart { width:100%; height:320px; display:block; background:#fbfcfe; border-radius:6px; border:1px solid #eef1f5; }
   #tooltip { position:absolute; pointer-events:none; background:rgba(255,255,255,.97); border:1px solid #d5dce6; border-radius:6px; padding:8px 10px; font-size:12px; color:#2c3e50; box-shadow:0 2px 8px rgba(60,80,120,.15); display:none; z-index:10; line-height:1.6; white-space:nowrap; }
   #tooltip b { color:#1a2733; }
   .signal { padding:12px; border-radius:8px; font-size:15px; font-weight:600; margin-bottom:8px; line-height:1.6; }
@@ -130,6 +131,35 @@
   button:hover { background:#eef2f7; }
   button.on { background:#3b82c4; border-color:#3b82c4; color:#fff; }
   .tip { font-size:11px; color:#8a94a6; margin-top:4px; }
+  #sectorPanel { display:none; }
+  body.sector-mode #sectorPanel { display:block; }
+  body.sector-mode #syncPanel, body.sector-mode #metricGrid, body.sector-mode #mHero, body.sector-mode #signalPanel,
+  body.sector-mode #analysisPanel, body.sector-mode #chartPanel, body.sector-mode #kPanel, body.sector-mode #bookPanel,
+  body.sector-mode #stratPanel { display:none; }
+  .sector-top { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+  .sector-top button.primary { background:#3b82c4; border-color:#3b82c4; color:#fff; font-weight:600; }
+  .sector-status { font-size:12px; color:#8a94a6; }
+  .sector-layout { display:grid; grid-template-columns:minmax(260px,360px) 1fr; gap:12px; align-items:start; }
+  .sector-list { max-height:720px; overflow:auto; border:1px solid #eef1f5; border-radius:8px; background:#fbfcfe; padding:6px; }
+  .sector-item { display:grid; grid-template-columns:1fr auto; gap:6px; padding:8px; border:1px solid transparent; border-radius:8px; cursor:pointer; margin-bottom:5px; }
+  .sector-item:hover { background:#f2f6fb; }
+  .sector-item.active { background:#eaf2fb; border-color:#bcd7f2; }
+  .sector-name { font-size:13px; font-weight:700; color:#1a2733; }
+  .sector-meta { font-size:11px; color:#8a94a6; margin-top:3px; line-height:1.5; }
+  .sector-score { text-align:right; font-weight:700; font-size:16px; }
+  .sector-score small { display:block; color:#8a94a6; font-size:10px; font-weight:400; }
+  .sector-detail-head { display:flex; justify-content:space-between; gap:8px; align-items:flex-start; margin-bottom:8px; }
+  .sector-a2b { background:#fff8e8; border:1px solid #f5e0a8; color:#8a5b00; border-radius:8px; padding:8px 10px; font-size:12px; line-height:1.7; margin-bottom:10px; }
+  .leader-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:8px; margin:8px 0 10px; }
+  .leader-card { border:1px solid #e3e8ef; background:#fff; border-radius:8px; padding:8px; cursor:pointer; }
+  .leader-card:hover { background:#f5f7fa; }
+  .leader-card .lc-name { font-size:13px; font-weight:700; color:#1a2733; }
+  .leader-card .lc-sub { font-size:11px; color:#8a94a6; margin-top:3px; }
+  .leader-card .lc-act { margin-top:6px; display:flex; gap:6px; }
+  .leader-card .lc-act button { padding:4px 8px; font-size:11px; }
+  .sector-legend { display:flex; gap:10px; flex-wrap:wrap; font-size:11px; color:#3b4a5a; margin-top:6px; }
+  .legend-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:4px; }
+  @media (max-width:900px){ .sector-layout { grid-template-columns:1fr; } .sector-list { max-height:360px; } }
   .flash { animation:fl .6s; } @keyframes fl { from{background:#fff3cd;} to{background:transparent;} }
   /* 折叠面板(默认桌面: 全部展开, 不显示箭头) */
   .collap-head { cursor:default; }
@@ -212,7 +242,13 @@
     body[data-view="pool"] #analysisPanel { display:none; }
     body[data-view="more"] #syncPanel { display:block; margin:0 14px 12px; }  /* 云同步仅在更多视图显示 */
     body[data-view="board"] #syncPanel, body[data-view="watch"] #syncPanel,
-    body[data-view="pool"] #syncPanel { display:none; }
+    body[data-view="pool"] #syncPanel, body[data-view="sector"] #syncPanel { display:none; }
+    body[data-view="sector"] .sidebar, body[data-view="sector"] .m-hero { display:none; }
+    body[data-view="sector"] .wrap { display:block; }
+    body[data-view="sector"] #sectorPanel { display:block; }
+    body[data-view="sector"] #metricGrid, body[data-view="sector"] #signalPanel, body[data-view="sector"] #analysisPanel,
+    body[data-view="sector"] #chartPanel, body[data-view="sector"] #kPanel, body[data-view="sector"] #bookPanel,
+    body[data-view="sector"] #stratPanel { display:none; }
     body[data-view="more"] .ctrl { display:flex; flex-wrap:wrap; gap:8px; padding:14px; }
     body[data-view="more"] .sub { display:block; padding:0 14px; }
     body[data-view="more"] #metricGrid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; padding:14px; }
@@ -325,7 +361,35 @@
     <button id="btnAuto" class="on">自动刷新: 开(每5秒)</button>
     <button id="btnAnalyze">🧠 个股分析</button>
     <button id="btnMarketAnalyze">🌐 总指挥决策</button>
+    <button id="btnSectorHeat">🔥 板块热度</button>
     <span class="tip">数据源腾讯行情·完整分时·仅供参考不构成投资建议</span>
+  </div>
+
+  <div class="panel" id="sectorPanel">
+    <h2>🔥 板块热度 · 看A做B</h2>
+    <div class="sector-top">
+      <button id="btnSectorRefresh" class="primary">刷新板块热度</button>
+      <button id="btnSectorBack">返回盯盘</button>
+      <span class="sector-status" id="sectorStatus">点击刷新，按涨幅/涨停数/主力净流入综合排序</span>
+    </div>
+    <div class="sector-layout">
+      <div>
+        <div class="pool-tip">左侧选强板块 A：看热度、涨幅、涨停家数、主力净流入；右侧看内部龙头/跟随票 B。</div>
+        <div class="sector-list" id="sectorList"></div>
+      </div>
+      <div>
+        <div class="sector-detail-head">
+          <div>
+            <h2 id="sectorTitle" style="margin-bottom:3px">请选择板块</h2>
+            <div class="sector-status" id="sectorSub">会展示板块内部涨幅前排、成交额前排，以及同图相对K线。</div>
+          </div>
+        </div>
+        <div class="sector-a2b" id="sectorA2B">用法：先确认 A（板块/龙头）持续强，再从同板块 B 候选里找回踩、低位补涨或承接更好的票；A 转弱，B 同步失效。</div>
+        <div class="leader-grid" id="sectorLeaders"></div>
+        <canvas id="sectorKChart"></canvas>
+        <div class="sector-legend" id="sectorLegend"></div>
+      </div>
+    </div>
   </div>
 
   <div class="panel" id="syncPanel">
@@ -415,6 +479,7 @@
   <button class="m-tab active" data-view="board"><span class="mt-ico">📈</span><span>盯盘</span></button>
   <button class="m-tab" data-view="watch"><span class="mt-ico">⭐</span><span>自选</span></button>
   <button class="m-tab" data-view="pool"><span class="mt-ico">🎯</span><span>股票池</span></button>
+  <button class="m-tab" data-view="sector"><span class="mt-ico">🔥</span><span>板块</span></button>
   <button class="m-tab" data-view="more"><span class="mt-ico">⚙️</span><span>更多</span></button>
 </nav>
 <div class="swipe-hint" id="swipeHint"></div>
@@ -973,6 +1038,161 @@ document.querySelectorAll('.reco-sort-btn').forEach(b=>b.addEventListener('click
   document.querySelectorAll('.reco-sort-btn').forEach(x=>x.classList.toggle('active', x===b));
   etfRecoRender();
 }));
+
+
+// ==================== 板块热度 · 看A做B ====================
+let sectorBoards=[], sectorStocks=[], sectorCur=null, sectorLoading=false;
+const SECTOR_COLORS=['#e0475b','#3b82c4','#f59e0b','#8b5cf6','#1aae6f','#ef4444','#06b6d4'];
+function emUrl(path, params){
+  return 'https://push2.eastmoney.com/api/'+path+'?'+new URLSearchParams(params).toString();
+}
+async function emFetch(path, params){
+  const r=await fetch(emUrl(path, params), {cache:'no-store', headers:{'Accept':'application/json'}});
+  if(!r.ok) throw new Error('东方财富接口失败 '+r.status);
+  return r.json();
+}
+function emToCode(num){
+  num=String(num||'');
+  if(/^6/.test(num)) return 'sh'+num;
+  if(/^[034]/.test(num)) return 'sz'+num;
+  if(/^[89]/.test(num)) return 'bj'+num;
+  return num;
+}
+function fmtMoney(v){
+  v=Number(v||0);
+  const abs=Math.abs(v);
+  if(abs>=1e8) return (v/1e8).toFixed(1)+'亿';
+  if(abs>=1e4) return (v/1e4).toFixed(0)+'万';
+  return v.toFixed(0);
+}
+function sectorHeatScore(b){
+  const chg=Number(b.f3)||0, zt=Number(b.f104)||0, flow=(Number(b.f62)||0)/1e8;
+  return +(chg*1.2 + zt*0.28 + Math.max(-2, Math.min(2, flow))*0.35).toFixed(2);
+}
+async function loadSectorBoards(){
+  const fields='f12,f14,f3,f62,f128,f140,f136,f207,f208,f104,f105,f106';
+  const [ind, concept]=await Promise.all([
+    emFetch('qt/clist/get',{pn:1,pz:80,po:1,np:1,fltt:2,invt:2,fid:'f3',fs:'m:90+t:2',fields}),
+    emFetch('qt/clist/get',{pn:1,pz:80,po:1,np:1,fltt:2,invt:2,fid:'f3',fs:'m:90+t:3',fields})
+  ]);
+  const rows=[];
+  [['行业', ind], ['概念', concept]].forEach(([typ,d])=>{
+    const arr=(d&&d.data&&d.data.diff)||[];
+    arr.forEach(x=>rows.push({...x, typ, heat:sectorHeatScore(x)}));
+  });
+  rows.sort((a,b)=>b.heat-a.heat || (b.f3||0)-(a.f3||0));
+  sectorBoards=rows.slice(0,60);
+  return sectorBoards;
+}
+function renderSectorBoards(){
+  const box=document.getElementById('sectorList'); if(!box) return;
+  if(!sectorBoards.length){ box.innerHTML='<div class="pool-tip">暂无板块数据，点击刷新。</div>'; return; }
+  box.innerHTML='';
+  sectorBoards.forEach(b=>{
+    const div=document.createElement('div');
+    div.className='sector-item'+(sectorCur&&sectorCur.f12===b.f12?' active':'');
+    div.dataset.code=b.f12;
+    const cls=(b.f3||0)>0?'up':((b.f3||0)<0?'down':'flat');
+    div.innerHTML='<div><div class="sector-name">'+b.f14+' <span class="sector-meta">'+b.typ+'</span></div>'+
+      '<div class="sector-meta">A锚: '+(b.f128||'—')+((b.f136!=null)?' '+(b.f136>0?'+':'')+b.f136+'%':'')+' · 涨/跌 '+(b.f104||0)+'/'+(b.f105||0)+' · 主力 '+fmtMoney(b.f62)+'</div></div>'+
+      '<div class="sector-score '+cls+'">'+((b.f3>0?'+':'')+(b.f3||0).toFixed(2))+'%<small>热度 '+b.heat+'</small></div>';
+    div.onclick=()=>selectSector(b);
+    box.appendChild(div);
+  });
+}
+async function loadSectorStocks(board){
+  const d=await emFetch('qt/clist/get',{pn:1,pz:50,po:1,np:1,fltt:2,invt:2,fid:'f3',fs:'b:'+board.f12,fields:'f12,f14,f2,f3,f6,f8,f15,f16,f17,f18'});
+  const arr=(d&&d.data&&d.data.diff)||[];
+  sectorStocks=arr.map(x=>({
+    code:emToCode(x.f12), name:x.f14, price:+x.f2, chg:+x.f3, amount:+x.f6, turn:+x.f8,
+    high:+x.f15, low:+x.f16, open:+x.f17, pc:+x.f18,
+    pos:(x.f15>x.f16 && x.f2>0)?(x.f2-x.f16)/(x.f15-x.f16):0.5
+  })).filter(x=>x.code&&x.price>0);
+  return sectorStocks;
+}
+function sectorPickB(stocks){
+  return stocks.filter(s=>s.chg>0.5 && s.chg<8.8 && s.amount>30000000 && s.pos<0.78)
+    .sort((a,b)=>(b.amount-a.amount) || (b.chg-a.chg)).slice(0,3);
+}
+function renderSectorStocks(){
+  const title=document.getElementById('sectorTitle'), sub=document.getElementById('sectorSub'), a2b=document.getElementById('sectorA2B'), box=document.getElementById('sectorLeaders');
+  if(!sectorCur){ return; }
+  title.textContent=sectorCur.f14+' · '+sectorCur.typ;
+  sub.textContent='板块涨幅 '+(sectorCur.f3>0?'+':'')+sectorCur.f3+'% · 涨/跌 '+(sectorCur.f104||0)+'/'+(sectorCur.f105||0)+' · 主力净流入 '+fmtMoney(sectorCur.f62);
+  const leaders=sectorStocks.slice(0,6);
+  const bs=sectorPickB(sectorStocks);
+  const a=leaders[0];
+  a2b.innerHTML='看A做B：A锚看 <b>'+(a?a.name:'—')+'</b> 与板块整体强度；B候选看 '+(bs.length?bs.map(x=>'<b>'+x.name+'</b>').join(' / '):'暂无合格跟随票')+'。只有 A 不破位、板块涨停/上涨家数继续扩散，B 的回踩承接才有意义；A转弱则放弃B。';
+  box.innerHTML='';
+  leaders.forEach((s,i)=>{
+    const cls=s.chg>0?'up':(s.chg<0?'down':'flat');
+    const role=i===0?'A锚龙头':(bs.some(x=>x.code===s.code)?'B候选':'前排观察');
+    const div=document.createElement('div'); div.className='leader-card';
+    div.innerHTML='<div class="lc-name">'+role+' · '+s.name+'</div><div class="lc-sub">'+s.code.toUpperCase()+' · <span class="'+cls+'">'+(s.chg>0?'+':'')+s.chg.toFixed(2)+'%</span> · 额 '+fmtMoney(s.amount)+' · 换手 '+(s.turn||0).toFixed(1)+'%</div>'+
+      '<div class="lc-act"><button data-act="view">看分时</button><button data-act="add">加自选</button></div>';
+    div.querySelector('[data-act="view"]').onclick=e=>{ e.stopPropagation(); switchStock(s.code); setDesktopSector(false); if(window.innerWidth<=768) setView('board'); };
+    div.querySelector('[data-act="add"]').onclick=e=>{ e.stopPropagation(); addFromPool({code:s.code,name:s.name}); };
+    div.onclick=()=>{ switchStock(s.code); setDesktopSector(false); if(window.innerWidth<=768) setView('board'); };
+    box.appendChild(div);
+  });
+}
+async function drawSectorLeaderK(stocks){
+  const cv=document.getElementById('sectorKChart'), lg=document.getElementById('sectorLegend'); if(!cv) return;
+  const dpr=window.devicePixelRatio||1, w=cv.clientWidth, h=cv.clientHeight; cv.width=w*dpr; cv.height=h*dpr;
+  const ctx=cv.getContext('2d'); ctx.scale(dpr,dpr); ctx.clearRect(0,0,w,h);
+  lg.innerHTML='';
+  const picks=stocks.slice(0,6), series=[];
+  for(let i=0;i<picks.length;i++){
+    try{
+      let bars=await jiyinKlineN(picks[i].code, 70);
+      if(!bars||bars.length<8) continue;
+      bars=(await jiyinAttachToday(bars, picks[i].code)).bars.slice(-60);
+      const base=bars[0].c;
+      series.push({stock:picks[i], color:SECTOR_COLORS[i%SECTOR_COLORS.length], vals:bars.map(b=>({t:b.t, v:(b.c/base-1)*100}))});
+    }catch(e){}
+  }
+  if(!series.length){ ctx.fillStyle='#8a94a6'; ctx.font='13px sans-serif'; ctx.textAlign='center'; ctx.fillText('暂无龙头K线数据', w/2, h/2); return; }
+  let mn=Infinity,mx=-Infinity,n=Math.max(...series.map(s=>s.vals.length));
+  series.forEach(s=>s.vals.forEach(p=>{ mn=Math.min(mn,p.v); mx=Math.max(mx,p.v); }));
+  const pad=(mx-mn)*0.12||1; mn-=pad; mx+=pad;
+  const X=i=>42+i/Math.max(1,n-1)*(w-52), Y=v=>h-24-(v-mn)/((mx-mn)||1)*(h-38);
+  ctx.strokeStyle='#eef1f5'; ctx.fillStyle='#8a94a6'; ctx.font='10px sans-serif';
+  for(let k=0;k<=4;k++){ const v=mn+(mx-mn)*k/4,y=Y(v); ctx.beginPath(); ctx.moveTo(42,y); ctx.lineTo(w-4,y); ctx.stroke(); ctx.fillText(v.toFixed(1)+'%',2,y+3); }
+  ctx.strokeStyle='#c8d0da'; ctx.setLineDash([4,3]); ctx.beginPath(); ctx.moveTo(42,Y(0)); ctx.lineTo(w-4,Y(0)); ctx.stroke(); ctx.setLineDash([]);
+  series.forEach(s=>{
+    ctx.strokeStyle=s.color; ctx.lineWidth=1.8; ctx.beginPath();
+    s.vals.forEach((p,i)=>{ const x=X(i), y=Y(p.v); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.stroke();
+    const last=s.vals[s.vals.length-1]; ctx.fillStyle=s.color; ctx.beginPath(); ctx.arc(X(s.vals.length-1),Y(last.v),3,0,7); ctx.fill();
+    const span=document.createElement('span'); span.innerHTML='<i class="legend-dot" style="background:'+s.color+'"></i>'+s.stock.name+' '+(last.v>0?'+':'')+last.v.toFixed(1)+'%'; lg.appendChild(span);
+  });
+}
+async function selectSector(board){
+  sectorCur=board; renderSectorBoards();
+  document.getElementById('sectorStatus').textContent='加载 '+board.f14+' 内部龙头…';
+  document.getElementById('sectorLeaders').innerHTML='<div class="pool-tip">加载中…</div>';
+  try{
+    const stocks=await loadSectorStocks(board);
+    renderSectorStocks();
+    await drawSectorLeaderK(stocks);
+    document.getElementById('sectorStatus').textContent='已更新 '+board.f14+' · '+new Date().toLocaleTimeString();
+  }catch(e){ document.getElementById('sectorStatus').textContent='板块内部加载失败: '+e.message; }
+}
+async function refreshSectorHeat(){
+  if(sectorLoading) return;
+  sectorLoading=true;
+  document.getElementById('sectorStatus').textContent='拉取行业/概念板块热度中…';
+  try{
+    const list=await loadSectorBoards(); renderSectorBoards();
+    if(list.length) await selectSector(sectorCur&&list.find(x=>x.f12===sectorCur.f12)||list[0]);
+  }catch(e){ document.getElementById('sectorStatus').textContent='板块热度加载失败: '+e.message; }
+  finally{ sectorLoading=false; }
+}
+function setDesktopSector(on){
+  document.body.classList.toggle('sector-mode', !!on);
+  const btn=document.getElementById('btnSectorHeat'); if(btn) btn.classList.toggle('on', !!on);
+  if(on && !sectorBoards.length) refreshSectorHeat();
+  setTimeout(()=>{ if(on && sectorStocks.length) drawSectorLeaderK(sectorStocks); else if(chartState) drawChart(chartState.ticks, chartState.pc); },60);
+}
 
 
 // ==================== 极阴尾排 选股策略 (JS复刻通达信极阴27) ====================
@@ -2369,6 +2589,7 @@ document.querySelectorAll('.collapsible .collap-head').forEach(h=>{
 // ===== 手机端: 底部导航视图切换 =====
 function setView(view){
   document.body.dataset.view=view;
+  document.body.classList.remove('sector-mode');
   document.querySelectorAll('.m-tab').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
   // 同步 tabWatch/tabPool 内联display, 避免内联样式压制 CSS 视图切换规则
   if(view==='watch'||view==='pool'){
@@ -2376,6 +2597,7 @@ function setView(view){
     document.getElementById('tabPool').style.display = view==='pool'?'':'none';
   }
   if(view==='pool'){ renderPool(); refreshPool(); }
+  if(view==='sector'){ if(!sectorBoards.length) refreshSectorHeat(); else setTimeout(()=>drawSectorLeaderK(sectorStocks),60); }
   if(view==='board'){ setTimeout(()=>{ if(chartState) drawChart(chartState.ticks, chartState.pc); }, 50); }
   // iOS风格进入动画: 当前视图容器淡入上移(仅手机端)
   if(window.innerWidth<=768){
@@ -2384,6 +2606,9 @@ function setView(view){
   }
 }
 document.querySelectorAll('.m-tab').forEach(b=>b.addEventListener('click', ()=>setView(b.dataset.view)));
+document.getElementById('btnSectorHeat').onclick=()=>setDesktopSector(!document.body.classList.contains('sector-mode'));
+document.getElementById('btnSectorRefresh').onclick=refreshSectorHeat;
+document.getElementById('btnSectorBack').onclick=()=>{ setDesktopSector(false); if(window.innerWidth<=768) setView('board'); };
 
 // ===== 手机端: 左右滑动切换股票(仅盯盘视图) =====
 (function(){
