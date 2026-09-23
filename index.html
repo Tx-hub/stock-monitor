@@ -169,6 +169,10 @@
   .leader-card .lc-quality { font-size:11px; color:#3b4a5a; margin-top:4px; line-height:1.5; }
   .buy-light { display:inline-block; margin-right:4px; font-weight:700; }
   .sector-alert { color:#1aae6f; font-weight:700; }
+  .b-signal { border-radius:8px; padding:7px 9px; margin-top:6px; font-size:12px; line-height:1.6; font-weight:600; }
+  .b-signal.green { background:#eafaf1; border:1px solid #a3e4c4; color:#159a5f; }
+  .b-signal.yellow { background:#fff8e8; border:1px solid #f5e0a8; color:#8a5b00; }
+  .b-signal.red { background:#fdecee; border:1px solid #f4b8c0; color:#d63a4d; }
   .sector-section-title { grid-column:1/-1; font-size:12px; font-weight:700; color:#3b82c4; margin:4px 0 -2px; padding-top:4px; border-top:1px dashed #e3e8ef; }
   .leader-card .lc-act { margin-top:6px; display:flex; gap:6px; }
   .leader-card .lc-act button { padding:4px 8px; font-size:11px; }
@@ -1271,8 +1275,14 @@ function renderSectorStocks(){
   sub.textContent='板块涨幅 '+(sectorCur.f3>0?'+':'')+sectorCur.f3+'% · 仅显示沪深A股主板成分 · 主力净流入 '+fmtMoney(sectorCur.f62);
   const leaders=sectorPickA(sectorStocks);
   const bs=sectorPickB(sectorStocks);
+  const greenBs=bs.filter(x=>x.buyState==='green');
+  const yellowBs=bs.filter(x=>x.buyState==='yellow');
   const a=leaders[0];
-  a2b.innerHTML='看A做B：A锚只看主板 <b>'+(a?a.name:'—')+'</b> 与板块整体强度；下面单独列出 <b>B票候选</b>（最多12只，不再只给6只涨幅前排）。只有 A 不破位、板块涨停/上涨家数继续扩散，B 的买点灯变🟢才进入视野；黄灯只等，红灯灰掉。';
+  const sigCls=greenBs.length?'green':(yellowBs.length?'yellow':'red');
+  const sigTxt=greenBs.length
+    ? '✅ B回踩信号：'+greenBs.map(x=>x.name).join(' / ')+' 已亮🟢；仍需总开关绿灯 + A锚封单稳定才触发报警。'
+    : (yellowBs.length ? '⏳ 暂无B回踩绿灯；'+yellowBs.length+'只处于🟡等待/半山腰，继续等回踩到MA10附近。' : '🛑 暂无可看的B票；当前不是追高区就是破位/成交不足。');
+  a2b.innerHTML='看A做B：A锚只看主板 <b>'+(a?a.name:'—')+'</b> 与板块整体强度；下面单独列出 <b>B票候选</b>（最多12只，不再只给6只涨幅前排）。只有 A 不破位、板块涨停/上涨家数继续扩散，B 的买点灯变🟢才进入视野；黄灯只等，红灯灰掉。<div class="b-signal '+sigCls+'">'+sigTxt+'</div>';
   box.innerHTML='';
   if(!leaders.length){ box.innerHTML='<div class="pool-tip">该板块当前前排里没有沪深A股主板成分，已过滤科创/创业/北交/ETF。</div>'; }
   const addTitle=t=>{ const el=document.createElement('div'); el.className='sector-section-title'; el.textContent=t; box.appendChild(el); };
@@ -1289,9 +1299,9 @@ function renderSectorStocks(){
   };
   addTitle('A锚/板块强度确认（看它，不一定买它）');
   leaders.forEach((s,i)=>addCard(s, i===0?'A锚龙头':'A锚备选', true));
-  addTitle('B票候选（等买点灯；报警只认🟢）');
+  addTitle('B票候选（🟢回踩到位 '+greenBs.length+'只 / 🟡等待 '+yellowBs.length+'只；报警只认🟢）');
   if(!bs.length){ const el=document.createElement('div'); el.className='pool-tip'; el.textContent='当前没有合格B票候选：要么都在追高区/破位，要么成交额不足。'; box.appendChild(el); }
-  bs.forEach((s,i)=>addCard(s, (s.buyState==='green'?'B候选🟢':'B候选待等')+' #'+(i+1), false));
+  bs.forEach((s,i)=>addCard(s, (s.buyState==='green'?'✅ B回踩信号':'B候选待等')+' #'+(i+1), false));
   maybeSectorAlert(leaders, bs);
 }
 async function drawSectorLeaderK(stocks){
