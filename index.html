@@ -49,6 +49,11 @@
   .pool-item .pi-add { font-size:16px; color:#3b82c4; padding:0 3px; font-weight:700; }
   .pool-item .pi-add:hover { color:#1a5a94; }
   .pool-item .pi-add.added { color:#a3e4c4; }
+  .jiyin-card { display:block; align-items:stretch; position:relative; background:#fff; border:1px solid #e3e8ef; padding:8px; }
+  .jiyin-card:hover { background:#f2f6fb; }
+  .jiyin-card .trend-row { grid-template-columns:1fr auto; }
+  .jiyin-card .pi-add { display:inline-block; margin-right:4px; vertical-align:1px; }
+  .jiyin-mini-chart { width:100%; height:138px; display:block; margin-top:7px; background:#fbfcfe; border:1px solid #eef1f5; border-radius:6px; }
   .sidebar .add-box { display:flex; gap:4px; margin-bottom:8px; }
   .sidebar .add-box input { flex:1; min-width:0; border:1px solid #d5dce6; border-radius:6px; padding:6px 8px; font-size:12px; color:#2c3e50; }
   .sidebar .add-box button { padding:6px 10px; font-size:12px; }
@@ -1898,7 +1903,7 @@ async function jiyinScan(){
               bars=nb;
             }
             const r = cfg.evalAsync ? await cfg.evalAsync(bars, s.code, s.name) : cfg.evalSync(bars, s.code, s.name);
-            if(r) jiyinResults.push(r);
+            if(r){ if(curStrat==='jiyin') r.bars=bars.slice(-90); jiyinResults.push(r); }
             return;
           }catch(e){ if(retry===1) miss++; await new Promise(r=>setTimeout(r,200)); }
         }
@@ -1935,7 +1940,12 @@ function jiyinRender(){
     const inW=watchList.some(x=>x.code===s.code);
     const cls=s.chg>0?'up':(s.chg<0?'down':'flat');
     const scoreTxt = cfg.scoreName+(''+s.score);
-    if(curStrat==='ltprob'){
+    if(curStrat==='jiyin'){
+      div.className='pool-item jiyin-card'+(s.code===CODE?' active':'');
+      div.innerHTML='<div class="trend-row"><div><div class="trend-name">'+(idx+1)+'. '+s.name+'</div><div class="trend-meta">'+s.code.toUpperCase()+' · 极阴尾排 · 收 '+s.close.toFixed(2)+' · 涨跌 '+(s.chg>0?'+':'')+s.chg.toFixed(2)+'%</div></div>'+
+        '<div class="trend-score"><span class="pi-add'+(inW?' added':'')+'">'+(inW?'✓':'＋')+'</span>'+s.score+'<div class="trend-meta">'+scoreTxt+'</div></div></div>'+
+        '<canvas class="jiyin-mini-chart" data-code="'+s.code+'" title="'+s.name+' 日K+成交量"></canvas>';
+    } else if(curStrat==='ltprob'){
       const sub2='连'+s.lbc+'板 · '+s.fbt+(s.zbc?' · 炸'+s.zbc:'')+' · '+s.bk;
       div.innerHTML=
         '<div style="flex:1;min-width:0"><div class="pi-name">'+(idx+1)+'. '+s.name+' <span class="lt-brain" title="AI定性">🧠</span></div><div class="pi-code">'+s.code.toUpperCase()+' · '+sub2+'</div></div>'+
@@ -1958,6 +1968,23 @@ function jiyinRender(){
     div.querySelector('.pi-add').addEventListener('click', e=>{ e.stopPropagation(); addFromPool(s); });
     box.appendChild(div);
   });
+  if(curStrat==='jiyin') requestAnimationFrame(drawJiyinMiniDailies);
+}
+
+async function drawJiyinMiniDailies(){
+  const cvs=Array.from(document.querySelectorAll('.jiyin-mini-chart'));
+  for(const cv of cvs){
+    const s=jiyinResults.find(x=>x.code===cv.dataset.code);
+    if(!s) continue;
+    if(s.bars&&s.bars.length){ drawTrendDailyToCanvas(s, cv); continue; }
+    const dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight; cv.width=w*dpr; cv.height=h*dpr;
+    const ctx=cv.getContext('2d'); ctx.scale(dpr,dpr); ctx.clearRect(0,0,w,h); ctx.fillStyle='#8a94a6'; ctx.font='12px sans-serif'; ctx.textAlign='center'; ctx.fillText('加载日K+成交量…',w/2,h/2);
+    try{
+      let bars=await jiyinKlineN(s.code,90);
+      if(bars&&bars.length){ bars=(await jiyinAttachToday(bars, s.code)).bars; s.bars=bars.slice(-90); drawTrendDailyToCanvas(s, cv); }
+    }catch(e){}
+    await new Promise(r=>setTimeout(r,30));
+  }
 }
 
 // 龙头概率: 单只 grok 定性分析(框架第三层)
