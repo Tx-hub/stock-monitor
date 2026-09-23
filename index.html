@@ -185,14 +185,16 @@
   .leader-card .lc-act button { padding:4px 8px; font-size:11px; }
   .sector-legend { display:flex; gap:10px; flex-wrap:wrap; font-size:11px; color:#3b4a5a; margin-top:6px; }
   .legend-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:4px; }
-  .trend-layout { display:grid; grid-template-columns:minmax(260px,360px) 1fr; gap:12px; align-items:start; }
+  .trend-layout { display:grid; grid-template-columns:minmax(360px,520px) 1fr; gap:12px; align-items:start; }
   .trend-list { max-height:720px; overflow:auto; border:1px solid #eef1f5; border-radius:8px; background:#fbfcfe; padding:6px; }
-  .trend-item { display:grid; grid-template-columns:1fr auto; gap:6px; padding:8px; border:1px solid transparent; border-radius:8px; cursor:pointer; margin-bottom:5px; }
+  .trend-item { display:block; padding:8px; border:1px solid transparent; border-radius:8px; cursor:pointer; margin-bottom:7px; background:#fff; }
   .trend-item:hover { background:#f2f6fb; }
   .trend-item.active { background:#eaf2fb; border-color:#bcd7f2; }
+  .trend-row { display:grid; grid-template-columns:1fr auto; gap:6px; align-items:start; }
   .trend-name { font-size:13px; font-weight:700; color:#1a2733; }
   .trend-meta { font-size:11px; color:#8a94a6; margin-top:3px; line-height:1.5; }
   .trend-score { text-align:right; font-size:16px; font-weight:800; color:#3b82c4; }
+  .trend-mini-chart { width:100%; height:88px; display:block; margin-top:7px; background:#fbfcfe; border:1px solid #eef1f5; border-radius:6px; }
   .trend-detail { background:#f8f9fc; border:1px solid #e3e8ef; border-radius:8px; padding:8px 10px; font-size:12px; line-height:1.7; margin-bottom:10px; }
   @media (max-width:900px){ .trend-layout { grid-template-columns:1fr; } .trend-list { max-height:360px; } }
   @media (max-width:900px){ .sector-layout { grid-template-columns:1fr; } .sector-list { max-height:360px; } }
@@ -448,7 +450,7 @@
     </div>
     <div class="trend-layout">
       <div>
-        <div class="pool-tip">列表按趋势分排序；点击个股后，下方显示日K与当日分时量。只做趋势观察，不追高。</div>
+        <div class="pool-tip">列表按趋势分排序；每只票下方直接展示迷你日K（MA5/10/20/60）。点击个股后，右侧/下方查看大图与当日分时量。</div>
         <div class="trend-list" id="trendList"></div>
       </div>
       <div>
@@ -1473,10 +1475,18 @@ function renderTrendList(){
   trendResults.forEach(s=>{
     const cls=s.chg>0?'up':(s.chg<0?'down':'flat');
     const div=document.createElement('div'); div.className='trend-item'+(trendCur&&trendCur.code===s.code?' active':''); div.dataset.code=s.code;
-    div.innerHTML='<div><div class="trend-name">'+s.name+'</div><div class="trend-meta">'+s.code.toUpperCase()+' · '+s.state+' · MA20偏离 '+(s.dev20>0?'+':'')+s.dev20+'% · 20日 '+(s.mom20>0?'+':'')+s.mom20+'%</div></div>'+
-      '<div class="trend-score">'+s.score+'<div class="trend-meta '+cls+'">'+(s.chg>0?'+':'')+s.chg.toFixed(2)+'%</div></div>';
+    div.innerHTML='<div class="trend-row"><div><div class="trend-name">'+s.name+'</div><div class="trend-meta">'+s.code.toUpperCase()+' · '+s.state+' · MA20偏离 '+(s.dev20>0?'+':'')+s.dev20+'% · 20日 '+(s.mom20>0?'+':'')+s.mom20+'%</div></div>'+
+      '<div class="trend-score">'+s.score+'<div class="trend-meta '+cls+'">'+(s.chg>0?'+':'')+s.chg.toFixed(2)+'%</div></div></div>'+
+      '<canvas class="trend-mini-chart" data-code="'+s.code+'" title="'+s.name+' 日K"></canvas>';
     div.onclick=()=>selectTrend(s.code);
     box.appendChild(div);
+  });
+  requestAnimationFrame(drawTrendMiniDailies);
+}
+function drawTrendMiniDailies(){
+  document.querySelectorAll('.trend-mini-chart').forEach(cv=>{
+    const s=trendResults.find(x=>x.code===cv.dataset.code);
+    if(s) drawTrendDailyToCanvas(s, cv, true);
   });
 }
 async function loadMinuteDetailByCode(code){
@@ -1489,18 +1499,26 @@ async function loadMinuteDetailByCode(code){
   }
   return [];
 }
-function drawTrendDaily(s){
-  const cv=document.getElementById('trendDailyChart'); if(!cv) return;
+function drawTrendDailyToCanvas(s, cv, mini=false){
+  if(!cv) return;
   const dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight; cv.width=w*dpr; cv.height=h*dpr;
   const ctx=cv.getContext('2d'); ctx.scale(dpr,dpr); ctx.clearRect(0,0,w,h);
-  const bars=(s&&s.bars||[]).slice(-80); if(!bars.length){ ctx.fillStyle='#8a94a6'; ctx.fillText('暂无日K',w/2,h/2); return; }
+  const bars=(s&&s.bars||[]).slice(mini?-45:-80); if(!bars.length){ ctx.fillStyle='#8a94a6'; ctx.fillText('暂无日K',w/2,h/2); return; }
   const C=bars.map(b=>b.c), ma=(m)=>C.map((_,i)=>i<m-1?null:C.slice(i-m+1,i+1).reduce((a,b)=>a+b,0)/m);
   const mas=[ma(5),ma(10),ma(20),ma(60)]; let mn=Infinity,mx=-Infinity;
   bars.forEach(b=>{mn=Math.min(mn,b.l);mx=Math.max(mx,b.h);}); mas.forEach(a=>a.forEach(v=>{ if(v){mn=Math.min(mn,v);mx=Math.max(mx,v);} }));
-  const X=i=>42+i/Math.max(1,bars.length-1)*(w-50), Y=v=>h-20-(v-mn)/((mx-mn)||1)*(h-34), cw=Math.max(2,(w-50)/bars.length*.58);
-  ctx.strokeStyle='#eef1f5'; ctx.fillStyle='#8a94a6'; ctx.font='10px sans-serif'; for(let k=0;k<=4;k++){ const v=mn+(mx-mn)*k/4,y=Y(v); ctx.beginPath(); ctx.moveTo(42,y); ctx.lineTo(w-4,y); ctx.stroke(); ctx.fillText(v.toFixed(2),2,y+3); }
+  const left=mini?4:42, right=mini?4:8, top=mini?6:10, bottom=mini?8:20;
+  const X=i=>left+i/Math.max(1,bars.length-1)*(w-left-right), Y=v=>h-bottom-(v-mn)/((mx-mn)||1)*(h-top-bottom), cw=Math.max(mini?1.5:2,(w-left-right)/bars.length*.58);
+  ctx.strokeStyle='#eef1f5'; ctx.fillStyle='#8a94a6'; ctx.font='10px sans-serif'; for(let k=0;k<=4;k++){ const v=mn+(mx-mn)*k/4,y=Y(v); ctx.beginPath(); ctx.moveTo(left,y); ctx.lineTo(w-right,y); ctx.stroke(); if(!mini) ctx.fillText(v.toFixed(2),2,y+3); }
   bars.forEach((b,i)=>{ const col=b.c>=b.o?'#e0475b':'#1aae6f', x=X(i); ctx.strokeStyle=col; ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(x,Y(b.h)); ctx.lineTo(x,Y(b.l)); ctx.stroke(); const y1=Y(b.o),y2=Y(b.c); ctx.fillRect(x-cw/2,Math.min(y1,y2),cw,Math.max(1,Math.abs(y2-y1))); });
   [['#3b82c4',mas[0]],['#8b5cf6',mas[1]],['#f59e0b',mas[2]],['#d63a4d',mas[3]]].forEach(([col,a])=>{ ctx.strokeStyle=col; ctx.beginPath(); let st=false; a.forEach((v,i)=>{ if(v==null)return; const x=X(i),y=Y(v); if(!st){ctx.moveTo(x,y);st=true;}else ctx.lineTo(x,y); }); ctx.stroke(); });
+  if(mini){
+    ctx.fillStyle='#8a94a6'; ctx.font='10px sans-serif'; ctx.textAlign='right';
+    ctx.fillText('日K·MA',w-6,14); ctx.textAlign='left';
+  }
+}
+function drawTrendDaily(s){
+  drawTrendDailyToCanvas(s, document.getElementById('trendDailyChart'), false);
 }
 function drawTrendMinuteVol(ticks){
   const cv=document.getElementById('trendMinuteVol'); if(!cv) return;
@@ -1513,7 +1531,8 @@ function drawTrendMinuteVol(ticks){
   ctx.fillStyle='#8a94a6'; ctx.fillText('9:30',36,h-4); ctx.textAlign='center'; ctx.fillText('11:30/13:00',X(120),h-4); ctx.textAlign='right'; ctx.fillText('15:00',w-4,h-4); ctx.textAlign='left';
 }
 async function selectTrend(code){
-  const s=trendResults.find(x=>x.code===code); if(!s) return; trendCur=s; renderTrendList();
+  const s=trendResults.find(x=>x.code===code); if(!s) return; trendCur=s;
+  document.querySelectorAll('.trend-item').forEach(el=>el.classList.toggle('active', el.dataset.code===code));
   document.getElementById('trendTitle').textContent=s.name+' · '+s.code.toUpperCase();
   document.getElementById('trendDetail').innerHTML='趋势状态：<b>'+s.state+'</b> · 20日涨幅 '+(s.mom20>0?'+':'')+s.mom20+'% · 60日涨幅 '+(s.mom60>0?'+':'')+s.mom60+'% · MA20偏离 '+(s.dev20>0?'+':'')+s.dev20+'% · 量能比 '+s.volRatio+' · 成交额 '+fmtMoney(s.amount)+'<br>用法：趋势票优先等回踩MA20/MA10后企稳，不在远离均线时追。';
   drawTrendDaily(s); drawTrendMinuteVol([]);
@@ -1524,7 +1543,7 @@ function setDesktopTrend(on){
   const btn=document.getElementById('btnTrendQuery'); if(btn) btn.classList.toggle('on', !!on);
   const sbtn=document.getElementById('btnSectorHeat'); if(sbtn&&on) sbtn.classList.remove('on');
   if(on && !trendResults.length) trendScan();
-  setTimeout(()=>{ if(on&&trendCur){ drawTrendDaily(trendCur); loadMinuteDetailByCode(trendCur.code).then(drawTrendMinuteVol); } else if(chartState) drawChart(chartState.ticks, chartState.pc); },60);
+  setTimeout(()=>{ if(on&&trendCur){ drawTrendMiniDailies(); drawTrendDaily(trendCur); loadMinuteDetailByCode(trendCur.code).then(drawTrendMinuteVol); } else if(chartState) drawChart(chartState.ticks, chartState.pc); },60);
 }
 
 
@@ -2932,7 +2951,7 @@ function setView(view){
   }
   if(view==='pool'){ renderPool(); refreshPool(); }
   if(view==='sector'){ if(!sectorBoards.length) refreshSectorHeat(); else setTimeout(()=>drawSectorLeaderK(sectorStocks),60); }
-  if(view==='trend'){ if(!trendResults.length) trendScan(); else setTimeout(()=>{ if(trendCur){ drawTrendDaily(trendCur); loadMinuteDetailByCode(trendCur.code).then(drawTrendMinuteVol); } },60); }
+  if(view==='trend'){ if(!trendResults.length) trendScan(); else setTimeout(()=>{ drawTrendMiniDailies(); if(trendCur){ drawTrendDaily(trendCur); loadMinuteDetailByCode(trendCur.code).then(drawTrendMinuteVol); } },60); }
   if(view==='board'){ setTimeout(()=>{ if(chartState) drawChart(chartState.ticks, chartState.pc); }, 50); }
   // iOS风格进入动画: 当前视图容器淡入上移(仅手机端)
   if(window.innerWidth<=768){
