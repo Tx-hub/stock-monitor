@@ -444,10 +444,10 @@
     <div class="sector-top">
       <button id="btnTrendScan" class="primary">扫描趋势票</button>
       <button id="btnTrendBack">返回盯盘</button>
-      <span class="sector-status" id="trendStatus">扫描A股主板成交活跃票，筛 MA20 上行 + 多头趋势 + 未过度追高。</span>
+      <span class="sector-status" id="trendStatus">扫描全量沪深A股主板，筛 MA20 上行 + 多头趋势 + 未过度追高。</span>
     </div>
     <div class="trend-layout">
-      <div class="pool-tip">列表按趋势分排序；每只票直接展示日K（MA5/10/20/60）+ 对应日成交量。点击个股直接进入盯盘界面，不再放大。</div>
+      <div class="pool-tip">全量扫描沪深A股主板（sh60 / sz00），列表按趋势分排序；每只票直接展示日K（MA5/10/20/60）+ 对应日成交量。点击个股直接进入盯盘界面。</div>
       <div class="trend-list" id="trendList"></div>
     </div>
   </div>
@@ -1408,14 +1408,35 @@ function setDesktopSector(on){
 let trendResults=[], trendScanning=false;
 function trendSetStatus(t){ const el=document.getElementById('trendStatus'); if(el) el.textContent=t; }
 async function trendUniverse(){
-  const fields='f12,f14,f2,f3,f6,f8,f15,f16,f17,f18';
-  const parts=await Promise.all([
-    emFetch('qt/clist/get',{pn:1,pz:180,po:1,np:1,fltt:2,invt:2,fid:'f6',fs:'m:1+t:2',fields}),
-    emFetch('qt/clist/get',{pn:1,pz:180,po:1,np:1,fltt:2,invt:2,fid:'f6',fs:'m:0+t:6',fields})
-  ]);
-  const map={};
-  parts.forEach(d=>((d&&d.data&&d.data.diff)||[]).forEach(x=>{ const code=emToCode(x.f12); if(isAMainBoard(code)) map[code]={code,name:x.f14,price:+x.f2,chg:+x.f3,amount:+x.f6,turn:+x.f8,high:+x.f15,low:+x.f16,open:+x.f17,pc:+x.f18}; }));
-  return Object.values(map).sort((a,b)=>b.amount-a.amount).slice(0,220);
+  const today=new Date().toISOString().slice(0,10), cacheKey='trend_universe_all';
+  let list=null;
+  try{ const c=JSON.parse(localStorage.getItem(cacheKey)); if(c&&c.date===today&&c.list&&c.list.length) list=c.list; }catch(e){}
+  if(!list){
+    const base='https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData';
+    list=[];
+    for(const node of ['sh_a','sz_a']){
+      for(let page=1;page<=120;page++){
+        let arr=[];
+        try{ const r=await fetch(base+'?page='+page+'&num=80&sort=symbol&asc=1&node='+node+'&symbol=&_s_r_a=page'); const t=await r.text(); arr=t.trim().startsWith('[')?JSON.parse(t):[]; }catch(e){ arr=[]; }
+        if(!arr.length) break;
+        arr.forEach(it=>{ const code=String(it.symbol||'').toLowerCase(), name=it.name||code; if(isAMainBoard(code) && !/ST|退/.test(name)) list.push({code,name}); });
+        trendSetStatus('拉取全量主板池… '+node+' 第'+page+'页，累计'+list.length);
+        await new Promise(r=>setTimeout(r,25));
+      }
+    }
+    try{ localStorage.setItem(cacheKey, JSON.stringify({date:today,list})); }catch(e){}
+  }
+  const out=[];
+  for(let i=0;i<list.length;i+=60){
+    const batch=list.slice(i,i+60), raw=await fetchQuoteBatch(batch.map(x=>x.code));
+    batch.forEach(s=>{
+      const p=(raw[s.code]||'').split('~');
+      out.push({...s, price:+p[3]||0, chg:+p[32]||0, amount:(+p[37]||0)*10000, turn:+p[38]||0});
+    });
+    trendSetStatus('补全实时行情字段… '+Math.min(i+60,list.length)+'/'+list.length);
+    await new Promise(r=>setTimeout(r,25));
+  }
+  return out;
 }
 function trendEval(s,bars){
   if(!bars||bars.length<70) return null;
@@ -1440,18 +1461,22 @@ async function trendScan(){
   if(trendScanning) return;
   trendScanning=true; trendResults=[];
   const listBox=document.getElementById('trendList'); if(listBox) listBox.innerHTML='';
-  trendSetStatus('拉取主板成交活跃池…');
+  trendSetStatus('拉取全量沪深主板池…');
   try{
     const uni=await trendUniverse();
     const out=[];
-    for(let i=0;i<uni.length;i++){
-      const s=uni[i];
-      try{ const bars=await jiyinKlineN(s.code,90); const r=trendEval(s,bars); if(r) out.push(r); }catch(e){}
-      if(i%8===7){ trendSetStatus('趋势扫描 '+(i+1)+'/'+uni.length+'，已入选 '+out.length); await new Promise(r=>setTimeout(r,25)); }
+    const CHUNK=10;
+    for(let i=0;i<uni.length;i+=CHUNK){
+      const batch=uni.slice(i,i+CHUNK);
+      await Promise.all(batch.map(async s=>{
+        try{ const bars=await jiyinKlineN(s.code,90); const r=trendEval(s,bars); if(r) out.push(r); }catch(e){}
+      }));
+      trendSetStatus('全量趋势扫描 '+Math.min(i+CHUNK,uni.length)+'/'+uni.length+'，已入选 '+out.length);
+      await new Promise(r=>setTimeout(r,60));
     }
     trendResults=out.sort((a,b)=>b.score-a.score).slice(0,40);
     renderTrendList();
-    trendSetStatus('完成：趋势票 '+trendResults.length+' 只 · '+new Date().toLocaleTimeString());
+    trendSetStatus('完成：全量主板 '+uni.length+' 只，趋势票 '+trendResults.length+' 只 · '+new Date().toLocaleTimeString());
   }catch(e){ trendSetStatus('趋势扫描失败: '+e.message); }
   finally{ trendScanning=false; }
 }
