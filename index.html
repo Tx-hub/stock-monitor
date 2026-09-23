@@ -169,6 +169,7 @@
   .leader-card .lc-quality { font-size:11px; color:#3b4a5a; margin-top:4px; line-height:1.5; }
   .buy-light { display:inline-block; margin-right:4px; font-weight:700; }
   .sector-alert { color:#1aae6f; font-weight:700; }
+  .sector-section-title { grid-column:1/-1; font-size:12px; font-weight:700; color:#3b82c4; margin:4px 0 -2px; padding-top:4px; border-top:1px dashed #e3e8ef; }
   .leader-card .lc-act { margin-top:6px; display:flex; gap:6px; }
   .leader-card .lc-act button { padding:4px 8px; font-size:11px; }
   .sector-legend { display:flex; gap:10px; flex-wrap:wrap; font-size:11px; color:#3b4a5a; margin-top:6px; }
@@ -1182,18 +1183,43 @@ function renderSectorBoards(){
   });
 }
 async function loadSectorStocks(board){
-  const d=await emFetch('qt/clist/get',{pn:1,pz:50,po:1,np:1,fltt:2,invt:2,fid:'f3',fs:'b:'+board.f12,fields:'f12,f14,f2,f3,f6,f8,f15,f16,f17,f18'});
-  const arr=(d&&d.data&&d.data.diff)||[];
+  const fields='f12,f14,f2,f3,f6,f8,f15,f16,f17,f18';
+  // 同时取“涨幅前排”和“成交额前排”，否则只看6只涨幅榜很容易全是A/观察，没有真正可等的B票。
+  const [byChg, byAmt]=await Promise.all([
+    emFetch('qt/clist/get',{pn:1,pz:120,po:1,np:1,fltt:2,invt:2,fid:'f3',fs:'b:'+board.f12,fields}),
+    emFetch('qt/clist/get',{pn:1,pz:120,po:1,np:1,fltt:2,invt:2,fid:'f6',fs:'b:'+board.f12,fields})
+  ]);
+  const map={};
+  [byChg, byAmt].forEach(d=>((d&&d.data&&d.data.diff)||[]).forEach(x=>{ map[x.f12]=x; }));
+  const arr=Object.values(map);
   sectorStocks=arr.map(x=>({
     code:emToCode(x.f12), name:x.f14, price:+x.f2, chg:+x.f3, amount:+x.f6, turn:+x.f8,
     high:+x.f15, low:+x.f16, open:+x.f17, pc:+x.f18,
     pos:(x.f15>x.f16 && x.f2>0)?(x.f2-x.f16)/(x.f15-x.f16):0.5
-  })).filter(x=>x.code&&x.price>0&&isAMainBoard(x.code));
+  })).filter(x=>x.code&&x.price>0&&isAMainBoard(x.code)).sort((a,b)=>b.chg-a.chg || b.amount-a.amount);
   return sectorStocks;
 }
+function sectorPickA(stocks){
+  return stocks.slice().sort((a,b)=>{
+    const qa=limitStats.byCode[a.code], qb=limitStats.byCode[b.code];
+    const sa=(qa?100+qa.lbc*15+Math.min(qa.fund/1e8,8)*3-qa.zbc*8:0)+a.chg+Math.min(a.amount/1e8,8);
+    const sb=(qb?100+qb.lbc*15+Math.min(qb.fund/1e8,8)*3-qb.zbc*8:0)+b.chg+Math.min(b.amount/1e8,8);
+    return sb-sa;
+  }).slice(0,3);
+}
 function sectorPickB(stocks){
-  return stocks.filter(s=>s.buyState==='green' && s.amount>30000000)
-    .sort((a,b)=>(b.amount-a.amount) || (b.chg-a.chg)).slice(0,3);
+  const aSet=new Set(sectorPickA(stocks).map(x=>x.code));
+  let list=stocks.filter(s=>!aSet.has(s.code) && !limitStats.byCode[s.code] && s.amount>30000000 && s.chg>-3 && s.chg<8.8 && s.pos<0.88 && s.buyState!=='red');
+  if(!list.length){
+    // 没有绿/黄灯时也给“B备选观察池”，但全部带状态灯，报警仍只认🟢。
+    list=stocks.filter(s=>!aSet.has(s.code) && !limitStats.byCode[s.code] && s.amount>30000000 && s.chg>-4 && s.chg<8.8);
+  }
+  return list.sort((a,b)=>{
+    const rank={green:3,yellow:2,red:1};
+    const sa=(rank[a.buyState]||0)*100 + Math.min(a.amount/1e8,10)*3 - Math.abs(a.d10||6)*2 + (a.chg>0?a.chg:0);
+    const sb=(rank[b.buyState]||0)*100 + Math.min(b.amount/1e8,10)*3 - Math.abs(b.d10||6)*2 + (b.chg>0?b.chg:0);
+    return sb-sa;
+  }).slice(0,12);
 }
 function calcBuyStateFromBars(s, bars){
   if(!bars||bars.length<25) return {...s, buyState:'red', buyText:'🔴 数据不足'};
@@ -1210,7 +1236,8 @@ function calcBuyStateFromBars(s, bars){
   return {...s, ma10, ma20, d10, buyState, buyText, shrink:v<vol5, steady:c>=o*0.995};
 }
 async function enrichSectorBuyStates(stocks){
-  const top=stocks.slice(0,12);
+  const sorted=stocks.slice().sort((a,b)=>b.amount-a.amount || b.chg-a.chg);
+  const top=Array.from(new Map(stocks.slice(0,25).concat(sorted.slice(0,25)).map(s=>[s.code,s])).values());
   for(const s of top){
     try{
       let bars=await jiyinKlineN(s.code, 35);
@@ -1242,16 +1269,16 @@ function renderSectorStocks(){
   if(!sectorCur){ return; }
   title.textContent=sectorCur.f14+' · '+sectorCur.typ;
   sub.textContent='板块涨幅 '+(sectorCur.f3>0?'+':'')+sectorCur.f3+'% · 仅显示沪深A股主板成分 · 主力净流入 '+fmtMoney(sectorCur.f62);
-  const leaders=sectorStocks.slice(0,6);
+  const leaders=sectorPickA(sectorStocks);
   const bs=sectorPickB(sectorStocks);
   const a=leaders[0];
-  a2b.innerHTML='看A做B：A锚只看主板 <b>'+(a?a.name:'—')+'</b> 与板块整体强度；主板B候选看 '+(bs.length?bs.map(x=>'<b>'+x.name+'</b>').join(' / '):'暂无合格跟随票')+'。只有 A 不破位、板块涨停/上涨家数继续扩散，B 的回踩承接才有意义；A转弱则放弃B。';
+  a2b.innerHTML='看A做B：A锚只看主板 <b>'+(a?a.name:'—')+'</b> 与板块整体强度；下面单独列出 <b>B票候选</b>（最多12只，不再只给6只涨幅前排）。只有 A 不破位、板块涨停/上涨家数继续扩散，B 的买点灯变🟢才进入视野；黄灯只等，红灯灰掉。';
   box.innerHTML='';
   if(!leaders.length){ box.innerHTML='<div class="pool-tip">该板块当前前排里没有沪深A股主板成分，已过滤科创/创业/北交/ETF。</div>'; }
-  leaders.forEach((s,i)=>{
+  const addTitle=t=>{ const el=document.createElement('div'); el.className='sector-section-title'; el.textContent=t; box.appendChild(el); };
+  const addCard=(s, role, keepBright)=>{
     const cls=s.chg>0?'up':(s.chg<0?'down':'flat');
-    const role=i===0?'A锚龙头':(bs.some(x=>x.code===s.code)?'B候选':'前排观察');
-    const div=document.createElement('div'); div.className='leader-card buy-'+(s.buyState||'red')+((s.buyState==='green'||i===0)?'':' not-green');
+    const div=document.createElement('div'); div.className='leader-card buy-'+(s.buyState||'red')+((s.buyState==='green'||keepBright)?'':' not-green');
     div.innerHTML='<div class="lc-name">'+role+' · '+s.name+'</div><div class="lc-sub"><span class="buy-light">'+(s.buyText||'🔴 未核验')+'</span>'+s.code.toUpperCase()+' · <span class="'+cls+'">'+(s.chg>0?'+':'')+s.chg.toFixed(2)+'%</span> · 额 '+fmtMoney(s.amount)+' · 换手 '+(s.turn||0).toFixed(1)+'%</div>'+
       '<div class="lc-quality">'+ztQualityText(s)+'<br>MA10偏离 '+(s.d10!=null?(s.d10>0?'+':'')+s.d10.toFixed(1)+'%':'—')+' · '+(s.shrink?'缩量':'未缩量')+' · '+(s.steady?'企稳':'未企稳')+'</div>'+
       '<div class="lc-act"><button data-act="view">看分时</button><button data-act="add">加自选</button></div>';
@@ -1259,7 +1286,12 @@ function renderSectorStocks(){
     div.querySelector('[data-act="add"]').onclick=e=>{ e.stopPropagation(); addFromPool({code:s.code,name:s.name}); };
     div.onclick=()=>{ switchStock(s.code); setDesktopSector(false); if(window.innerWidth<=768) setView('board'); };
     box.appendChild(div);
-  });
+  };
+  addTitle('A锚/板块强度确认（看它，不一定买它）');
+  leaders.forEach((s,i)=>addCard(s, i===0?'A锚龙头':'A锚备选', true));
+  addTitle('B票候选（等买点灯；报警只认🟢）');
+  if(!bs.length){ const el=document.createElement('div'); el.className='pool-tip'; el.textContent='当前没有合格B票候选：要么都在追高区/破位，要么成交额不足。'; box.appendChild(el); }
+  bs.forEach((s,i)=>addCard(s, (s.buyState==='green'?'B候选🟢':'B候选待等')+' #'+(i+1), false));
   maybeSectorAlert(leaders, bs);
 }
 async function drawSectorLeaderK(stocks){
@@ -1267,7 +1299,7 @@ async function drawSectorLeaderK(stocks){
   const dpr=window.devicePixelRatio||1, w=cv.clientWidth, h=cv.clientHeight; cv.width=w*dpr; cv.height=h*dpr;
   const ctx=cv.getContext('2d'); ctx.scale(dpr,dpr); ctx.clearRect(0,0,w,h);
   lg.innerHTML='';
-  const picks=stocks.slice(0,6), series=[];
+  const picks=Array.from(new Map(sectorPickA(stocks).concat(sectorPickB(stocks).slice(0,3)).map(s=>[s.code,s])).values()).slice(0,6), series=[];
   for(let i=0;i<picks.length;i++){
     try{
       let bars=await jiyinKlineN(picks[i].code, 70);
