@@ -150,11 +150,25 @@
   .sector-score small { display:block; color:#8a94a6; font-size:10px; font-weight:400; }
   .sector-detail-head { display:flex; justify-content:space-between; gap:8px; align-items:flex-start; margin-bottom:8px; }
   .sector-a2b { background:#fff8e8; border:1px solid #f5e0a8; color:#8a5b00; border-radius:8px; padding:8px 10px; font-size:12px; line-height:1.7; margin-bottom:10px; }
+  .gate-card { border-radius:10px; padding:10px 12px; margin-bottom:10px; border:1px solid #e3e8ef; background:#f8f9fc; }
+  .gate-card.gate-green { background:#eafaf1; border-color:#a3e4c4; }
+  .gate-card.gate-yellow { background:#fff8e8; border-color:#f5e0a8; }
+  .gate-card.gate-red { background:#fdecee; border-color:#f4b8c0; }
+  .gate-line { display:flex; justify-content:space-between; gap:10px; align-items:center; font-size:13px; font-weight:700; }
+  .gate-metrics { display:flex; gap:8px; flex-wrap:wrap; margin-top:7px; font-size:11px; color:#3b4a5a; }
+  .gate-metrics span { background:rgba(255,255,255,.72); border:1px solid rgba(213,220,230,.8); border-radius:999px; padding:3px 8px; }
   .leader-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:8px; margin:8px 0 10px; }
   .leader-card { border:1px solid #e3e8ef; background:#fff; border-radius:8px; padding:8px; cursor:pointer; }
   .leader-card:hover { background:#f5f7fa; }
+  .leader-card.not-green { opacity:.45; filter:grayscale(.25); }
+  .leader-card.buy-green { border-color:#1aae6f; box-shadow:0 0 0 1px rgba(26,174,111,.15) inset; }
+  .leader-card.buy-yellow { border-color:#f5e0a8; }
+  .leader-card.buy-red { border-color:#f4b8c0; }
   .leader-card .lc-name { font-size:13px; font-weight:700; color:#1a2733; }
   .leader-card .lc-sub { font-size:11px; color:#8a94a6; margin-top:3px; }
+  .leader-card .lc-quality { font-size:11px; color:#3b4a5a; margin-top:4px; line-height:1.5; }
+  .buy-light { display:inline-block; margin-right:4px; font-weight:700; }
+  .sector-alert { color:#1aae6f; font-weight:700; }
   .leader-card .lc-act { margin-top:6px; display:flex; gap:6px; }
   .leader-card .lc-act button { padding:4px 8px; font-size:11px; }
   .sector-legend { display:flex; gap:10px; flex-wrap:wrap; font-size:11px; color:#3b4a5a; margin-top:6px; }
@@ -371,6 +385,10 @@
       <button id="btnSectorRefresh" class="primary">刷新板块热度</button>
       <button id="btnSectorBack">返回盯盘</button>
       <span class="sector-status" id="sectorStatus">点击刷新，按涨幅/涨停数/主力净流入综合排序</span>
+    </div>
+    <div class="gate-card gate-yellow" id="marketGate">
+      <div class="gate-line"><span>🟡 总开关：等待行情</span><span>只在绿灯时看B</span></div>
+      <div class="gate-metrics"><span>上证/MA20 —</span><span>炸板率 —</span><span>跌停 —</span><span>最高标封单 —</span></div>
     </div>
     <div class="sector-layout">
       <div>
@@ -1041,7 +1059,8 @@ document.querySelectorAll('.reco-sort-btn').forEach(b=>b.addEventListener('click
 
 
 // ==================== 板块热度 · 看A做B ====================
-let sectorBoards=[], sectorStocks=[], sectorCur=null, sectorLoading=false;
+let sectorBoards=[], sectorStocks=[], sectorCur=null, sectorLoading=false, sectorGate=null;
+let limitStats={zt:0, zb:0, dt:0, byCode:{}, byHy:{}, high:null};
 const SECTOR_COLORS=['#e0475b','#3b82c4','#f59e0b','#8b5cf6','#1aae6f','#ef4444','#06b6d4'];
 function emUrl(path, params){
   return 'https://push2.eastmoney.com/api/'+path+'?'+new URLSearchParams(params).toString();
@@ -1063,6 +1082,8 @@ function isAMainBoard(code){
   // 只保留沪深A股主板：沪市60、深市00；剔除科创688/689、创业板30/301、北交所8/9、ETF/指数等。
   return (c.startsWith('sh') && /^60/.test(n)) || (c.startsWith('sz') && /^00/.test(n));
 }
+function todayYmdCompact(){ const d=new Date(); return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); }
+function fmtTime6(v){ v=String(v||'').padStart(6,'0'); return v.slice(0,2)+':'+v.slice(2,4); }
 function fmtMoney(v){
   v=Number(v||0);
   const abs=Math.abs(v);
@@ -1070,20 +1091,70 @@ function fmtMoney(v){
   if(abs>=1e4) return (v/1e4).toFixed(0)+'万';
   return v.toFixed(0);
 }
-function sectorHeatScore(b){
-  const chg=Number(b.f3)||0, zt=Number(b.f104)||0, flow=(Number(b.f62)||0)/1e8;
-  return +(chg*1.2 + zt*0.28 + Math.max(-2, Math.min(2, flow))*0.35).toFixed(2);
+async function emTopicPool(name, date){
+  try{
+    const d=await fetch('https://push2ex.eastmoney.com/'+name+'?'+new URLSearchParams({ut:'7eea3edcaed734bea9cbfc24409ed989',dpt:'wz.ztzt',Pageindex:0,pagesize:300,sort:'fbt:asc',date}), {cache:'no-store'}).then(r=>r.json());
+    return (d&&d.data)||{tc:0,pool:[]};
+  }catch(e){ return {tc:0,pool:[]}; }
+}
+async function loadLimitStats(){
+  const date=todayYmdCompact();
+  const [zt, zb, dt]=await Promise.all([emTopicPool('getTopicZTPool',date), emTopicPool('getTopicZBPool',date), emTopicPool('getTopicDTPool',date)]);
+  const byCode={}, byHy={}; let high=null;
+  (zt.pool||[]).forEach(x=>{
+    const code=emToCode(x.c); if(!isAMainBoard(code)) return;
+    const q={code, name:x.n, fund:+x.fund||0, fbt:x.fbt, lbt:x.lbt, zbc:+x.zbc||0, lbc:+(x.lbc||x.zttj&&x.zttj.ct)||0, hybk:x.hybk, amount:+x.amount||0, hs:+x.hs||0};
+    byCode[code]=q;
+    const hy=q.hybk||'其他'; byHy[hy]=byHy[hy]||{zt:0,lian:0,maxLbc:0,high:null};
+    byHy[hy].zt++; if(q.lbc>=2) byHy[hy].lian++; byHy[hy].maxLbc=Math.max(byHy[hy].maxLbc,q.lbc);
+    if(!byHy[hy].high || q.lbc>byHy[hy].high.lbc || (q.lbc===byHy[hy].high.lbc && q.fund>byHy[hy].high.fund)) byHy[hy].high=q;
+    if(!high || q.lbc>high.lbc || (q.lbc===high.lbc && q.fund>high.fund)) high=q;
+  });
+  limitStats={zt:(zt.pool||[]).filter(x=>isAMainBoard(emToCode(x.c))).length, zb:zb.tc||0, dt:dt.tc||0, byCode, byHy, high};
+  return limitStats;
+}
+async function loadMarketGate(stats){
+  let idxOk=false, idxTxt='上证/MA20 —';
+  try{
+    const bars=await jiyinKlineN('sh000001', 40);
+    const raw=await fetchQuote('sh000001');
+    const p=raw?raw.split('~'):[];
+    const price=parseFloat(p[3]) || (bars&&bars.length?bars[bars.length-1].c:NaN);
+    const C=(bars||[]).map(b=>b.c); const ma20=C.length>=20?C.slice(-20).reduce((a,b)=>a+b,0)/20:NaN;
+    idxOk=price>ma20; idxTxt='上证 '+(isFinite(price)?price.toFixed(0):'—')+' / MA20 '+(isFinite(ma20)?ma20.toFixed(0):'—')+(idxOk?' ✅':' ❌');
+  }catch(e){}
+  const blast=(stats.zt+stats.zb)>0 ? stats.zb/(stats.zt+stats.zb)*100 : 0;
+  const high=stats.high;
+  let level='green', title='🟢 总开关：可观察绿灯', reason='大盘和情绪未触发硬闸门';
+  if(!idxOk || blast>=35 || stats.dt>=20){ level='red'; title='🔴 总开关：仅观察'; reason=(!idxOk?'指数破位 ':'')+(blast>=35?'炸板率过高 ':'')+(stats.dt>=20?'跌停扩散 ':''); }
+  else if(blast>=25 || stats.dt>=10 || !high || high.fund<100000000){ level='yellow'; title='🟡 总开关：轻仓等待'; reason='情绪质量一般，必须等B买点绿灯'; }
+  sectorGate={level, title, reason, idxTxt, blast, dt:stats.dt, high};
+  renderMarketGate(); return sectorGate;
+}
+function renderMarketGate(){
+  const el=document.getElementById('marketGate'); if(!el||!sectorGate) return;
+  el.className='gate-card gate-'+sectorGate.level;
+  const high=sectorGate.high;
+  el.innerHTML='<div class="gate-line"><span>'+sectorGate.title+'</span><span>'+sectorGate.reason+'</span></div>'+
+    '<div class="gate-metrics"><span>'+sectorGate.idxTxt+'</span><span>炸板率 '+sectorGate.blast.toFixed(0)+'%</span><span>跌停 '+sectorGate.dt+'</span><span>最高标 '+(high?high.name+' '+high.lbc+'板 封单'+fmtMoney(high.fund):'—')+'</span></div>';
+}
+function sectorHeatScore(b, hy){
+  const chg=Number(b.f3)||0, zt=Number(b.f104)||0, flow=(Number(b.f62)||0)/1e8, day3=Number(b.f127)||0;
+  const lian=hy&&hy.lian||0, spread=Math.max(0, zt-1), divergence=(chg>0 && flow<-5)?1:0;
+  return +(chg*1.0 + Math.max(-8,Math.min(12,day3))*0.22 + zt*0.22 + lian*0.55 + spread*0.12 + Math.max(-3, Math.min(3, flow))*0.22 - divergence*1.2).toFixed(2);
 }
 async function loadSectorBoards(){
-  const fields='f12,f14,f3,f62,f128,f140,f136,f207,f208,f104,f105,f106';
-  const [ind, concept]=await Promise.all([
+  const fields='f12,f14,f3,f62,f127,f128,f140,f136,f207,f208,f104,f105,f106';
+  const [ind, concept, stats]=await Promise.all([
     emFetch('qt/clist/get',{pn:1,pz:80,po:1,np:1,fltt:2,invt:2,fid:'f3',fs:'m:90+t:2',fields}),
-    emFetch('qt/clist/get',{pn:1,pz:80,po:1,np:1,fltt:2,invt:2,fid:'f3',fs:'m:90+t:3',fields})
+    emFetch('qt/clist/get',{pn:1,pz:80,po:1,np:1,fltt:2,invt:2,fid:'f3',fs:'m:90+t:3',fields}),
+    loadLimitStats()
   ]);
+  await loadMarketGate(stats);
   const rows=[];
   [['行业', ind], ['概念', concept]].forEach(([typ,d])=>{
     const arr=(d&&d.data&&d.data.diff)||[];
-    arr.forEach(x=>rows.push({...x, typ, heat:sectorHeatScore(x)}));
+    arr.forEach(x=>{ const hy=limitStats.byHy[x.f14]||null; rows.push({...x, typ, hy, heat:sectorHeatScore(x, hy)}); });
   });
   rows.sort((a,b)=>b.heat-a.heat || (b.f3||0)-(a.f3||0));
   sectorBoards=rows.slice(0,60);
@@ -1098,10 +1169,13 @@ function renderSectorBoards(){
     div.className='sector-item'+(sectorCur&&sectorCur.f12===b.f12?' active':'');
     div.dataset.code=b.f12;
     const cls=(b.f3||0)>0?'up':((b.f3||0)<0?'down':'flat');
-    const anchorCode=emToCode(b.f140||b.f208||'');
-    const anchor=isAMainBoard(anchorCode) ? ((b.f128||b.f207||'—')+((b.f136!=null)?' '+(b.f136>0?'+':'')+b.f136+'%':'')) : '进板块看主板锚';
+    const a1={code:emToCode(b.f140||''), name:b.f128, chg:b.f136}, a2={code:emToCode(b.f208||''), name:b.f207, chg:null};
+    const amain=isAMainBoard(a1.code)?a1:(isAMainBoard(a2.code)?a2:null);
+    const anchor=amain ? ((amain.name||'—')+((amain.chg!=null)?' '+(amain.chg>0?'+':'')+amain.chg+'%':'')) : '进板块看主板锚';
+    const hy=b.hy||{};
+    const warn=(b.f3>0 && (Number(b.f62)||0)<-500000000)?' ⚠️价涨资金出':'';
     div.innerHTML='<div><div class="sector-name">'+b.f14+' <span class="sector-meta">'+b.typ+'</span></div>'+
-      '<div class="sector-meta">主板A锚: '+anchor+' · 涨/跌 '+(b.f104||0)+'/'+(b.f105||0)+' · 主力 '+fmtMoney(b.f62)+'</div></div>'+
+      '<div class="sector-meta">主板A锚: '+anchor+' · 涨停'+(b.f104||0)+' 连板'+(hy.lian||0)+' · 3日'+((b.f127>0?'+':'')+(b.f127||0).toFixed(2))+'% · 助攻'+Math.max(0,(b.f104||0)-1)+' · 主力 '+fmtMoney(b.f62)+warn+'</div></div>'+
       '<div class="sector-score '+cls+'">'+((b.f3>0?'+':'')+(b.f3||0).toFixed(2))+'%<small>热度 '+b.heat+'</small></div>';
     div.onclick=()=>selectSector(b);
     box.appendChild(div);
@@ -1118,8 +1192,50 @@ async function loadSectorStocks(board){
   return sectorStocks;
 }
 function sectorPickB(stocks){
-  return stocks.filter(s=>s.chg>0.5 && s.chg<8.8 && s.amount>30000000 && s.pos<0.78)
+  return stocks.filter(s=>s.buyState==='green' && s.amount>30000000)
     .sort((a,b)=>(b.amount-a.amount) || (b.chg-a.chg)).slice(0,3);
+}
+function calcBuyStateFromBars(s, bars){
+  if(!bars||bars.length<25) return {...s, buyState:'red', buyText:'🔴 数据不足'};
+  const C=bars.map(b=>b.c), O=bars.map(b=>b.o), V=bars.map(b=>b.v), i=bars.length-1;
+  const ma=(arr,m)=>arr.slice(-m).reduce((a,b)=>a+b,0)/m;
+  const ma10=ma(C,10), ma20=ma(C,20), vol5=ma(V,5), c=C[i], o=O[i], v=V[i];
+  const d10=(c/ma10-1)*100;
+  let buyState='red', buyText='🔴 追高/破位';
+  if(c<ma20) { buyState='red'; buyText='🔴 破位MA20'; }
+  else if((s.chg||0)>=8 || d10>8){ buyState='red'; buyText='🔴 追高区'; }
+  else if(Math.abs(d10)<=1.5 && v<vol5 && c>=o*0.995){ buyState='green'; buyText='🟢 回踩到位'; }
+  else if(d10>=3 && d10<=8){ buyState='yellow'; buyText='🟡 半山腰'; }
+  else if(d10<3 && c>=ma20){ buyState='yellow'; buyText='🟡 等企稳'; }
+  return {...s, ma10, ma20, d10, buyState, buyText, shrink:v<vol5, steady:c>=o*0.995};
+}
+async function enrichSectorBuyStates(stocks){
+  const top=stocks.slice(0,12);
+  for(const s of top){
+    try{
+      let bars=await jiyinKlineN(s.code, 35);
+      if(bars&&bars.length) bars=(await jiyinAttachToday(bars, s.code)).bars;
+      Object.assign(s, calcBuyStateFromBars(s,bars));
+    }catch(e){ Object.assign(s,{buyState:'red',buyText:'🔴 数据不足'}); }
+  }
+  stocks.slice(12).forEach(s=>{ if(!s.buyState) Object.assign(s,{buyState:'red',buyText:'🔴 未核验'}); });
+  return stocks;
+}
+function ztQualityText(s){
+  const q=limitStats.byCode[s.code];
+  if(!q) return '封板质量：未封板/无涨停数据';
+  return '封板质量：封单'+fmtMoney(q.fund)+' · 首封'+fmtTime6(q.fbt)+' · 炸板'+q.zbc+'次 · '+q.lbc+'连板 · 换手'+q.hs.toFixed(1)+'%';
+}
+function maybeSectorAlert(leaders, bs){
+  const box=document.getElementById('sectorStatus'); if(!box) return;
+  const a=leaders[0], green=bs[0];
+  const aq=a&&limitStats.byCode[a.code];
+  const ok=sectorGate&&sectorGate.level==='green'&&green&&aq&&aq.fund>80000000&&aq.zbc<=1;
+  if(ok){
+    box.innerHTML='<span class="sector-alert">🔔 报警：总开关绿灯 + A锚封单稳定 + B候选回踩到位：</span> '+green.name+'（'+green.code.toUpperCase()+'）';
+    if('Notification' in window && Notification.permission==='granted') new Notification('板块B候选绿灯', {body:green.name+' '+green.buyText+'，A锚 '+a.name+' 封单'+fmtMoney(aq.fund)});
+    else if('Notification' in window && Notification.permission==='default') Notification.requestPermission().catch(()=>{});
+  }
 }
 function renderSectorStocks(){
   const title=document.getElementById('sectorTitle'), sub=document.getElementById('sectorSub'), a2b=document.getElementById('sectorA2B'), box=document.getElementById('sectorLeaders');
@@ -1135,14 +1251,16 @@ function renderSectorStocks(){
   leaders.forEach((s,i)=>{
     const cls=s.chg>0?'up':(s.chg<0?'down':'flat');
     const role=i===0?'A锚龙头':(bs.some(x=>x.code===s.code)?'B候选':'前排观察');
-    const div=document.createElement('div'); div.className='leader-card';
-    div.innerHTML='<div class="lc-name">'+role+' · '+s.name+'</div><div class="lc-sub">'+s.code.toUpperCase()+' · <span class="'+cls+'">'+(s.chg>0?'+':'')+s.chg.toFixed(2)+'%</span> · 额 '+fmtMoney(s.amount)+' · 换手 '+(s.turn||0).toFixed(1)+'%</div>'+
+    const div=document.createElement('div'); div.className='leader-card buy-'+(s.buyState||'red')+((s.buyState==='green'||i===0)?'':' not-green');
+    div.innerHTML='<div class="lc-name">'+role+' · '+s.name+'</div><div class="lc-sub"><span class="buy-light">'+(s.buyText||'🔴 未核验')+'</span>'+s.code.toUpperCase()+' · <span class="'+cls+'">'+(s.chg>0?'+':'')+s.chg.toFixed(2)+'%</span> · 额 '+fmtMoney(s.amount)+' · 换手 '+(s.turn||0).toFixed(1)+'%</div>'+
+      '<div class="lc-quality">'+ztQualityText(s)+'<br>MA10偏离 '+(s.d10!=null?(s.d10>0?'+':'')+s.d10.toFixed(1)+'%':'—')+' · '+(s.shrink?'缩量':'未缩量')+' · '+(s.steady?'企稳':'未企稳')+'</div>'+
       '<div class="lc-act"><button data-act="view">看分时</button><button data-act="add">加自选</button></div>';
     div.querySelector('[data-act="view"]').onclick=e=>{ e.stopPropagation(); switchStock(s.code); setDesktopSector(false); if(window.innerWidth<=768) setView('board'); };
     div.querySelector('[data-act="add"]').onclick=e=>{ e.stopPropagation(); addFromPool({code:s.code,name:s.name}); };
     div.onclick=()=>{ switchStock(s.code); setDesktopSector(false); if(window.innerWidth<=768) setView('board'); };
     box.appendChild(div);
   });
+  maybeSectorAlert(leaders, bs);
 }
 async function drawSectorLeaderK(stocks){
   const cv=document.getElementById('sectorKChart'), lg=document.getElementById('sectorLegend'); if(!cv) return;
@@ -1180,9 +1298,11 @@ async function selectSector(board){
   document.getElementById('sectorLeaders').innerHTML='<div class="pool-tip">加载中…</div>';
   try{
     const stocks=await loadSectorStocks(board);
+    document.getElementById('sectorStatus').textContent='核验B候选买点状态灯…';
+    await enrichSectorBuyStates(stocks);
+    document.getElementById('sectorStatus').textContent='已更新 '+board.f14+' · '+new Date().toLocaleTimeString();
     renderSectorStocks();
     await drawSectorLeaderK(stocks);
-    document.getElementById('sectorStatus').textContent='已更新 '+board.f14+' · '+new Date().toLocaleTimeString();
   }catch(e){ document.getElementById('sectorStatus').textContent='板块内部加载失败: '+e.message; }
 }
 async function refreshSectorHeat(){
