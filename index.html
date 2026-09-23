@@ -90,8 +90,6 @@
   #kchart { width:100%; height:200px; display:block; background:#fbfcfe; border-radius:6px; border:1px solid #eef1f5; }
   #kvol { width:100%; height:80px; display:block; background:#fbfcfe; border-radius:6px; border:1px solid #eef1f5; margin-top:4px; }
   #sectorKChart { width:100%; height:320px; display:block; background:#fbfcfe; border-radius:6px; border:1px solid #eef1f5; }
-  #trendDailyChart { width:100%; height:260px; display:block; background:#fbfcfe; border-radius:6px; border:1px solid #eef1f5; }
-  #trendMinuteVol { width:100%; height:140px; display:block; background:#fbfcfe; border-radius:6px; border:1px solid #eef1f5; }
   #tooltip { position:absolute; pointer-events:none; background:rgba(255,255,255,.97); border:1px solid #d5dce6; border-radius:6px; padding:8px 10px; font-size:12px; color:#2c3e50; box-shadow:0 2px 8px rgba(60,80,120,.15); display:none; z-index:10; line-height:1.6; white-space:nowrap; }
   #tooltip b { color:#1a2733; }
   .signal { padding:12px; border-radius:8px; font-size:15px; font-weight:600; margin-bottom:8px; line-height:1.6; }
@@ -185,7 +183,7 @@
   .leader-card .lc-act button { padding:4px 8px; font-size:11px; }
   .sector-legend { display:flex; gap:10px; flex-wrap:wrap; font-size:11px; color:#3b4a5a; margin-top:6px; }
   .legend-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:4px; }
-  .trend-layout { display:grid; grid-template-columns:minmax(360px,520px) 1fr; gap:12px; align-items:start; }
+  .trend-layout { display:block; }
   .trend-list { max-height:720px; overflow:auto; border:1px solid #eef1f5; border-radius:8px; background:#fbfcfe; padding:6px; }
   .trend-item { display:block; padding:8px; border:1px solid transparent; border-radius:8px; cursor:pointer; margin-bottom:7px; background:#fff; }
   .trend-item:hover { background:#f2f6fb; }
@@ -194,7 +192,7 @@
   .trend-name { font-size:13px; font-weight:700; color:#1a2733; }
   .trend-meta { font-size:11px; color:#8a94a6; margin-top:3px; line-height:1.5; }
   .trend-score { text-align:right; font-size:16px; font-weight:800; color:#3b82c4; }
-  .trend-mini-chart { width:100%; height:88px; display:block; margin-top:7px; background:#fbfcfe; border:1px solid #eef1f5; border-radius:6px; }
+  .trend-mini-chart { width:100%; height:138px; display:block; margin-top:7px; background:#fbfcfe; border:1px solid #eef1f5; border-radius:6px; }
   .trend-detail { background:#f8f9fc; border:1px solid #e3e8ef; border-radius:8px; padding:8px 10px; font-size:12px; line-height:1.7; margin-bottom:10px; }
   @media (max-width:900px){ .trend-layout { grid-template-columns:1fr; } .trend-list { max-height:360px; } }
   @media (max-width:900px){ .sector-layout { grid-template-columns:1fr; } .sector-list { max-height:360px; } }
@@ -442,25 +440,15 @@
   </div>
 
   <div class="panel" id="trendPanel">
-    <h2>📊 趋势票查询 · 日K + 分时量</h2>
+    <h2>📊 趋势票查询 · 日K + 日成交量</h2>
     <div class="sector-top">
       <button id="btnTrendScan" class="primary">扫描趋势票</button>
       <button id="btnTrendBack">返回盯盘</button>
       <span class="sector-status" id="trendStatus">扫描A股主板成交活跃票，筛 MA20 上行 + 多头趋势 + 未过度追高。</span>
     </div>
     <div class="trend-layout">
-      <div>
-        <div class="pool-tip">列表按趋势分排序；每只票下方直接展示迷你日K（MA5/10/20/60）。点击个股后，右侧/下方查看大图与当日分时量。</div>
-        <div class="trend-list" id="trendList"></div>
-      </div>
-      <div>
-        <h2 id="trendTitle" style="margin-bottom:4px">请选择趋势票</h2>
-        <div class="trend-detail" id="trendDetail">会展示趋势结构、MA20偏离、20/60日涨幅、成交额和回踩位置。</div>
-        <h2>日K线（MA5/10/20/60）</h2>
-        <canvas id="trendDailyChart"></canvas>
-        <h2 style="margin-top:10px">今日分时量（分钟成交量）</h2>
-        <canvas id="trendMinuteVol"></canvas>
-      </div>
+      <div class="pool-tip">列表按趋势分排序；每只票直接展示日K（MA5/10/20/60）+ 对应日成交量。点击个股直接进入盯盘界面，不再放大。</div>
+      <div class="trend-list" id="trendList"></div>
     </div>
   </div>
 
@@ -1416,8 +1404,8 @@ function setDesktopSector(on){
   setTimeout(()=>{ if(on && sectorStocks.length) drawSectorLeaderK(sectorStocks); else if(chartState) drawChart(chartState.ticks, chartState.pc); },60);
 }
 
-// ==================== 趋势票查询 · 日K + 分时量 ====================
-let trendResults=[], trendCur=null, trendScanning=false;
+// ==================== 趋势票查询 · 日K + 日成交量 ====================
+let trendResults=[], trendScanning=false;
 function trendSetStatus(t){ const el=document.getElementById('trendStatus'); if(el) el.textContent=t; }
 async function trendUniverse(){
   const fields='f12,f14,f2,f3,f6,f8,f15,f16,f17,f18';
@@ -1450,7 +1438,7 @@ function trendEval(s,bars){
 }
 async function trendScan(){
   if(trendScanning) return;
-  trendScanning=true; trendResults=[]; trendCur=null;
+  trendScanning=true; trendResults=[];
   const listBox=document.getElementById('trendList'); if(listBox) listBox.innerHTML='';
   trendSetStatus('拉取主板成交活跃池…');
   try{
@@ -1464,7 +1452,6 @@ async function trendScan(){
     trendResults=out.sort((a,b)=>b.score-a.score).slice(0,40);
     renderTrendList();
     trendSetStatus('完成：趋势票 '+trendResults.length+' 只 · '+new Date().toLocaleTimeString());
-    if(trendResults.length) selectTrend(trendResults[0].code);
   }catch(e){ trendSetStatus('趋势扫描失败: '+e.message); }
   finally{ trendScanning=false; }
 }
@@ -1474,11 +1461,11 @@ function renderTrendList(){
   box.innerHTML='';
   trendResults.forEach(s=>{
     const cls=s.chg>0?'up':(s.chg<0?'down':'flat');
-    const div=document.createElement('div'); div.className='trend-item'+(trendCur&&trendCur.code===s.code?' active':''); div.dataset.code=s.code;
+    const div=document.createElement('div'); div.className='trend-item'; div.dataset.code=s.code;
     div.innerHTML='<div class="trend-row"><div><div class="trend-name">'+s.name+'</div><div class="trend-meta">'+s.code.toUpperCase()+' · '+s.state+' · MA20偏离 '+(s.dev20>0?'+':'')+s.dev20+'% · 20日 '+(s.mom20>0?'+':'')+s.mom20+'%</div></div>'+
       '<div class="trend-score">'+s.score+'<div class="trend-meta '+cls+'">'+(s.chg>0?'+':'')+s.chg.toFixed(2)+'%</div></div></div>'+
       '<canvas class="trend-mini-chart" data-code="'+s.code+'" title="'+s.name+' 日K"></canvas>';
-    div.onclick=()=>selectTrend(s.code);
+    div.onclick=()=>openTrendStock(s.code);
     box.appendChild(div);
   });
   requestAnimationFrame(drawTrendMiniDailies);
@@ -1486,64 +1473,38 @@ function renderTrendList(){
 function drawTrendMiniDailies(){
   document.querySelectorAll('.trend-mini-chart').forEach(cv=>{
     const s=trendResults.find(x=>x.code===cv.dataset.code);
-    if(s) drawTrendDailyToCanvas(s, cv, true);
+    if(s) drawTrendDailyToCanvas(s, cv);
   });
 }
-async function loadMinuteDetailByCode(code){
-  for(const host of MINUTE_HOSTS){
-    try{
-      const r=await fetch(host+'?code='+code+'&r='+Date.now(),{cache:'no-store'}); if(!r.ok) continue;
-      const d=await r.json(); const node=d.data&&d.data[code]&&d.data[code].data&&d.data[code].data.data;
-      if(node&&node.length){ let lastVol=0; return node.map(line=>{ const p=line.split(' '), vol=+p[2]||0; const dv=Math.max(0,vol-lastVol); lastVol=vol; return {t:p[0].slice(0,2)+':'+p[0].slice(2), price:+p[1], vol:dv}; }); }
-    }catch(e){}
-  }
-  return [];
-}
-function drawTrendDailyToCanvas(s, cv, mini=false){
+function drawTrendDailyToCanvas(s, cv){
   if(!cv) return;
   const dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight; cv.width=w*dpr; cv.height=h*dpr;
   const ctx=cv.getContext('2d'); ctx.scale(dpr,dpr); ctx.clearRect(0,0,w,h);
-  const bars=(s&&s.bars||[]).slice(mini?-45:-80); if(!bars.length){ ctx.fillStyle='#8a94a6'; ctx.fillText('暂无日K',w/2,h/2); return; }
+  const bars=(s&&s.bars||[]).slice(-55); if(!bars.length){ ctx.fillStyle='#8a94a6'; ctx.fillText('暂无日K',w/2,h/2); return; }
   const C=bars.map(b=>b.c), ma=(m)=>C.map((_,i)=>i<m-1?null:C.slice(i-m+1,i+1).reduce((a,b)=>a+b,0)/m);
   const mas=[ma(5),ma(10),ma(20),ma(60)]; let mn=Infinity,mx=-Infinity;
   bars.forEach(b=>{mn=Math.min(mn,b.l);mx=Math.max(mx,b.h);}); mas.forEach(a=>a.forEach(v=>{ if(v){mn=Math.min(mn,v);mx=Math.max(mx,v);} }));
-  const left=mini?4:42, right=mini?4:8, top=mini?6:10, bottom=mini?8:20;
-  const X=i=>left+i/Math.max(1,bars.length-1)*(w-left-right), Y=v=>h-bottom-(v-mn)/((mx-mn)||1)*(h-top-bottom), cw=Math.max(mini?1.5:2,(w-left-right)/bars.length*.58);
-  ctx.strokeStyle='#eef1f5'; ctx.fillStyle='#8a94a6'; ctx.font='10px sans-serif'; for(let k=0;k<=4;k++){ const v=mn+(mx-mn)*k/4,y=Y(v); ctx.beginPath(); ctx.moveTo(left,y); ctx.lineTo(w-right,y); ctx.stroke(); if(!mini) ctx.fillText(v.toFixed(2),2,y+3); }
+  const left=4, right=4, top=6, volH=34, gap=5, kBottom=volH+gap+8, volBase=h-8;
+  const X=i=>left+i/Math.max(1,bars.length-1)*(w-left-right), Y=v=>h-kBottom-(v-mn)/((mx-mn)||1)*(h-top-kBottom), cw=Math.max(1.5,(w-left-right)/bars.length*.58);
+  ctx.strokeStyle='#eef1f5'; ctx.fillStyle='#8a94a6'; ctx.font='10px sans-serif'; for(let k=0;k<=4;k++){ const v=mn+(mx-mn)*k/4,y=Y(v); ctx.beginPath(); ctx.moveTo(left,y); ctx.lineTo(w-right,y); ctx.stroke(); }
   bars.forEach((b,i)=>{ const col=b.c>=b.o?'#e0475b':'#1aae6f', x=X(i); ctx.strokeStyle=col; ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(x,Y(b.h)); ctx.lineTo(x,Y(b.l)); ctx.stroke(); const y1=Y(b.o),y2=Y(b.c); ctx.fillRect(x-cw/2,Math.min(y1,y2),cw,Math.max(1,Math.abs(y2-y1))); });
   [['#3b82c4',mas[0]],['#8b5cf6',mas[1]],['#f59e0b',mas[2]],['#d63a4d',mas[3]]].forEach(([col,a])=>{ ctx.strokeStyle=col; ctx.beginPath(); let st=false; a.forEach((v,i)=>{ if(v==null)return; const x=X(i),y=Y(v); if(!st){ctx.moveTo(x,y);st=true;}else ctx.lineTo(x,y); }); ctx.stroke(); });
-  if(mini){
-    ctx.fillStyle='#8a94a6'; ctx.font='10px sans-serif'; ctx.textAlign='right';
-    ctx.fillText('日K·MA',w-6,14); ctx.textAlign='left';
-  }
+  const vmax=Math.max(...bars.map(b=>b.v),1);
+  ctx.strokeStyle='#eef1f5'; ctx.beginPath(); ctx.moveTo(left,volBase-volH); ctx.lineTo(w-right,volBase-volH); ctx.stroke();
+  bars.forEach((b,i)=>{ ctx.fillStyle=b.c>=b.o?'#e0475b':'#1aae6f'; const bh=b.v/vmax*volH; ctx.fillRect(X(i)-cw/2,volBase-bh,cw,bh); });
+  ctx.fillStyle='#8a94a6'; ctx.font='10px sans-serif'; ctx.textAlign='right'; ctx.fillText('日K·MA + 成交量',w-6,14); ctx.textAlign='left';
 }
-function drawTrendDaily(s){
-  drawTrendDailyToCanvas(s, document.getElementById('trendDailyChart'), false);
-}
-function drawTrendMinuteVol(ticks){
-  const cv=document.getElementById('trendMinuteVol'); if(!cv) return;
-  const dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight; cv.width=w*dpr; cv.height=h*dpr;
-  const ctx=cv.getContext('2d'); ctx.scale(dpr,dpr); ctx.clearRect(0,0,w,h);
-  if(!ticks||!ticks.length){ ctx.fillStyle='#8a94a6'; ctx.font='13px sans-serif'; ctx.textAlign='center'; ctx.fillText('暂无分时量',w/2,h/2); return; }
-  const vmax=Math.max(...ticks.map(x=>x.vol),1), X=i=>36+i/Math.max(1,239)*(w-44), bw=Math.max(1,(w-44)/240*.8);
-  ctx.strokeStyle='#eef1f5'; ctx.fillStyle='#8a94a6'; ctx.font='10px sans-serif'; for(let k=0;k<=3;k++){ const y=h-18-k/3*(h-28); ctx.beginPath(); ctx.moveTo(36,y); ctx.lineTo(w-4,y); ctx.stroke(); }
-  ticks.forEach((t,i)=>{ ctx.fillStyle=i&&t.price>=ticks[i-1].price?'#e0475b':'#1aae6f'; const bh=t.vol/vmax*(h-28); ctx.fillRect(X(i)-bw/2,h-18-bh,bw,bh); });
-  ctx.fillStyle='#8a94a6'; ctx.fillText('9:30',36,h-4); ctx.textAlign='center'; ctx.fillText('11:30/13:00',X(120),h-4); ctx.textAlign='right'; ctx.fillText('15:00',w-4,h-4); ctx.textAlign='left';
-}
-async function selectTrend(code){
-  const s=trendResults.find(x=>x.code===code); if(!s) return; trendCur=s;
-  document.querySelectorAll('.trend-item').forEach(el=>el.classList.toggle('active', el.dataset.code===code));
-  document.getElementById('trendTitle').textContent=s.name+' · '+s.code.toUpperCase();
-  document.getElementById('trendDetail').innerHTML='趋势状态：<b>'+s.state+'</b> · 20日涨幅 '+(s.mom20>0?'+':'')+s.mom20+'% · 60日涨幅 '+(s.mom60>0?'+':'')+s.mom60+'% · MA20偏离 '+(s.dev20>0?'+':'')+s.dev20+'% · 量能比 '+s.volRatio+' · 成交额 '+fmtMoney(s.amount)+'<br>用法：趋势票优先等回踩MA20/MA10后企稳，不在远离均线时追。';
-  drawTrendDaily(s); drawTrendMinuteVol([]);
-  const ticks=await loadMinuteDetailByCode(code); if(trendCur&&trendCur.code===code) drawTrendMinuteVol(ticks);
+function openTrendStock(code){
+  switchStock(code);
+  setDesktopTrend(false);
+  if(window.innerWidth<=768) setView('board');
 }
 function setDesktopTrend(on){
   document.body.classList.toggle('trend-mode', !!on); if(on) document.body.classList.remove('sector-mode');
   const btn=document.getElementById('btnTrendQuery'); if(btn) btn.classList.toggle('on', !!on);
   const sbtn=document.getElementById('btnSectorHeat'); if(sbtn&&on) sbtn.classList.remove('on');
   if(on && !trendResults.length) trendScan();
-  setTimeout(()=>{ if(on&&trendCur){ drawTrendMiniDailies(); drawTrendDaily(trendCur); loadMinuteDetailByCode(trendCur.code).then(drawTrendMinuteVol); } else if(chartState) drawChart(chartState.ticks, chartState.pc); },60);
+  setTimeout(()=>{ if(on&&trendResults.length){ drawTrendMiniDailies(); } else if(chartState) drawChart(chartState.ticks, chartState.pc); },60);
 }
 
 
@@ -2951,7 +2912,7 @@ function setView(view){
   }
   if(view==='pool'){ renderPool(); refreshPool(); }
   if(view==='sector'){ if(!sectorBoards.length) refreshSectorHeat(); else setTimeout(()=>drawSectorLeaderK(sectorStocks),60); }
-  if(view==='trend'){ if(!trendResults.length) trendScan(); else setTimeout(()=>{ drawTrendMiniDailies(); if(trendCur){ drawTrendDaily(trendCur); loadMinuteDetailByCode(trendCur.code).then(drawTrendMinuteVol); } },60); }
+  if(view==='trend'){ if(!trendResults.length) trendScan(); else setTimeout(drawTrendMiniDailies,60); }
   if(view==='board'){ setTimeout(()=>{ if(chartState) drawChart(chartState.ticks, chartState.pc); }, 50); }
   // iOS风格进入动画: 当前视图容器淡入上移(仅手机端)
   if(window.innerWidth<=768){
