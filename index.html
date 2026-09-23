@@ -140,12 +140,16 @@
   body.sector-mode #sectorPanel { display:block; }
   body.sector-mode #syncPanel, body.sector-mode #metricGrid, body.sector-mode #mHero, body.sector-mode #signalPanel,
   body.sector-mode #analysisPanel, body.sector-mode #chartPanel, body.sector-mode #kPanel, body.sector-mode #bookPanel,
-  body.sector-mode #stratPanel, body.sector-mode #trendPanel { display:none; }
-  #trendPanel { display:none; }
+  body.sector-mode #stratPanel, body.sector-mode #trendPanel, body.sector-mode #jiyinPanel { display:none; }
+  #trendPanel, #jiyinPanel { display:none; }
   body.trend-mode #trendPanel { display:block; }
   body.trend-mode #syncPanel, body.trend-mode #metricGrid, body.trend-mode #mHero, body.trend-mode #signalPanel,
   body.trend-mode #analysisPanel, body.trend-mode #chartPanel, body.trend-mode #kPanel, body.trend-mode #bookPanel,
-  body.trend-mode #stratPanel, body.trend-mode #sectorPanel { display:none; }
+  body.trend-mode #stratPanel, body.trend-mode #sectorPanel, body.trend-mode #jiyinPanel { display:none; }
+  body.jiyin-mode #jiyinPanel { display:block; }
+  body.jiyin-mode #syncPanel, body.jiyin-mode #metricGrid, body.jiyin-mode #mHero, body.jiyin-mode #signalPanel,
+  body.jiyin-mode #analysisPanel, body.jiyin-mode #chartPanel, body.jiyin-mode #kPanel, body.jiyin-mode #bookPanel,
+  body.jiyin-mode #stratPanel, body.jiyin-mode #sectorPanel, body.jiyin-mode #trendPanel { display:none; }
   .sector-top { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
   .sector-top button.primary { background:#3b82c4; border-color:#3b82c4; color:#fff; font-weight:600; }
   .sector-status { font-size:12px; color:#8a94a6; }
@@ -283,19 +287,25 @@
     body[data-view="pool"] #analysisPanel { display:none; }
     body[data-view="more"] #syncPanel { display:block; margin:0 14px 12px; }  /* 云同步仅在更多视图显示 */
     body[data-view="board"] #syncPanel, body[data-view="watch"] #syncPanel,
-    body[data-view="pool"] #syncPanel, body[data-view="sector"] #syncPanel { display:none; }
+    body[data-view="pool"] #syncPanel, body[data-view="sector"] #syncPanel, body[data-view="jiyin"] #syncPanel { display:none; }
     body[data-view="sector"] .sidebar, body[data-view="sector"] .m-hero { display:none; }
     body[data-view="sector"] .wrap { display:block; }
     body[data-view="sector"] #sectorPanel { display:block; }
     body[data-view="sector"] #metricGrid, body[data-view="sector"] #signalPanel, body[data-view="sector"] #analysisPanel,
     body[data-view="sector"] #chartPanel, body[data-view="sector"] #kPanel, body[data-view="sector"] #bookPanel,
-    body[data-view="sector"] #stratPanel { display:none; }
+    body[data-view="sector"] #stratPanel, body[data-view="sector"] #jiyinPanel { display:none; }
     body[data-view="trend"] .sidebar, body[data-view="trend"] .m-hero { display:none; }
     body[data-view="trend"] .wrap { display:block; }
     body[data-view="trend"] #trendPanel { display:block; }
     body[data-view="trend"] #metricGrid, body[data-view="trend"] #signalPanel, body[data-view="trend"] #analysisPanel,
     body[data-view="trend"] #chartPanel, body[data-view="trend"] #kPanel, body[data-view="trend"] #bookPanel,
-    body[data-view="trend"] #stratPanel, body[data-view="trend"] #sectorPanel { display:none; }
+    body[data-view="trend"] #stratPanel, body[data-view="trend"] #sectorPanel, body[data-view="trend"] #jiyinPanel { display:none; }
+    body[data-view="jiyin"] .sidebar, body[data-view="jiyin"] .m-hero { display:none; }
+    body[data-view="jiyin"] .wrap { display:block; }
+    body[data-view="jiyin"] #jiyinPanel { display:block; }
+    body[data-view="jiyin"] #metricGrid, body[data-view="jiyin"] #signalPanel, body[data-view="jiyin"] #analysisPanel,
+    body[data-view="jiyin"] #chartPanel, body[data-view="jiyin"] #kPanel, body[data-view="jiyin"] #bookPanel,
+    body[data-view="jiyin"] #stratPanel, body[data-view="jiyin"] #sectorPanel, body[data-view="jiyin"] #trendPanel { display:none; }
     body[data-view="more"] .ctrl { display:flex; flex-wrap:wrap; gap:8px; padding:14px; }
     body[data-view="more"] .sub { display:block; padding:0 14px; }
     body[data-view="more"] #metricGrid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; padding:14px; }
@@ -340,7 +350,6 @@
     <div id="tabPool" style="display:none">
       <div class="pool-src">
         <button class="src-btn active" data-src="etf">ETF池</button>
-        <button class="src-btn" data-src="jiyin">选股策略</button>
       </div>
       <!-- ETF池 -->
       <div id="poolEtf">
@@ -377,25 +386,6 @@
           <div id="recoList"></div>
         </div>
       </div>
-      <!-- 选股策略 -->
-      <div id="poolJiyin" style="display:none">
-        <div class="stg-tabs">
-          <button class="stg-btn active" data-stg="jiyin">极阴尾排</button>
-          <button class="stg-btn" data-stg="longtou">龙头回踩</button>
-          <button class="stg-btn" data-stg="fanbao">反包</button>
-        </div>
-        <div class="stg-tabs" style="margin-top:-4px">
-          <button class="stg-btn" data-stg="ltprob">龙头概率</button>
-          <button class="stg-btn" data-stg="dreamer">大A梦想家</button>
-        </div>
-        <div class="pool-tip" id="stgTip">极阴尾排 · 扫全市场主板 · 得分降序 · Top1为当日票 · 仅供参考不构成投资建议</div>
-        <div class="jiyin-ctrl">
-          <button id="btnJiyinScan">▶ 开始扫描全市场</button>
-          <button id="btnJiyinStop" style="display:none">■ 停止</button>
-        </div>
-        <div class="jiyin-status" id="jiyinStatus">点击按钮开始（约1分钟，勿切走）</div>
-        <div id="jiyinList"></div>
-      </div>
     </div>
   </div>
 
@@ -409,6 +399,7 @@
     <button id="btnAnalyze">🧠 个股分析</button>
     <button id="btnMarketAnalyze">🌐 总指挥决策</button>
     <button id="btnSectorHeat">🔥 板块热度</button>
+    <button id="btnJiyinQuery">🌘 极阴尾排</button>
     <button id="btnTrendQuery">📊 趋势票</button>
     <span class="tip">数据源腾讯行情·完整分时·仅供参考不构成投资建议</span>
   </div>
@@ -442,6 +433,31 @@
         <div class="sector-legend" id="sectorLegend"></div>
       </div>
     </div>
+  </div>
+
+
+  <div class="panel" id="jiyinPanel">
+    <h2>🌘 极阴尾排 · 日K + 日成交量</h2>
+    <div class="sector-top">
+      <button id="btnJiyinBack">返回盯盘</button>
+      <span class="sector-status">独立策略页面：扫描全市场主板，结果卡片直接展示日K与对应成交量。</span>
+    </div>
+    <div class="stg-tabs">
+      <button class="stg-btn active" data-stg="jiyin">极阴尾排</button>
+      <button class="stg-btn" data-stg="longtou">龙头回踩</button>
+      <button class="stg-btn" data-stg="fanbao">反包</button>
+    </div>
+    <div class="stg-tabs" style="margin-top:-4px">
+      <button class="stg-btn" data-stg="ltprob">龙头概率</button>
+      <button class="stg-btn" data-stg="dreamer">大A梦想家</button>
+    </div>
+    <div class="pool-tip" id="stgTip">极阴尾排 · 扫全市场主板 · 得分降序 · Top1为当日票 · 仅供参考不构成投资建议</div>
+    <div class="jiyin-ctrl">
+      <button id="btnJiyinScan">▶ 开始扫描全市场</button>
+      <button id="btnJiyinStop" style="display:none">■ 停止</button>
+    </div>
+    <div class="jiyin-status" id="jiyinStatus">点击按钮开始（约1分钟，勿切走）</div>
+    <div id="jiyinList"></div>
   </div>
 
   <div class="panel" id="trendPanel">
@@ -545,6 +561,7 @@
   <button class="m-tab" data-view="watch"><span class="mt-ico">⭐</span><span>自选</span></button>
   <button class="m-tab" data-view="pool"><span class="mt-ico">🎯</span><span>股票池</span></button>
   <button class="m-tab" data-view="sector"><span class="mt-ico">🔥</span><span>板块</span></button>
+  <button class="m-tab" data-view="jiyin"><span class="mt-ico">🌘</span><span>极阴</span></button>
   <button class="m-tab" data-view="trend"><span class="mt-ico">📊</span><span>趋势</span></button>
   <button class="m-tab" data-view="more"><span class="mt-ico">⚙️</span><span>更多</span></button>
 </nav>
@@ -1402,9 +1419,10 @@ async function refreshSectorHeat(){
 }
 function setDesktopSector(on){
   document.body.classList.toggle('sector-mode', !!on);
-  if(on) document.body.classList.remove('trend-mode');
+  if(on) document.body.classList.remove('trend-mode','jiyin-mode');
   const btn=document.getElementById('btnSectorHeat'); if(btn) btn.classList.toggle('on', !!on);
   const tbtn=document.getElementById('btnTrendQuery'); if(tbtn&&on) tbtn.classList.remove('on');
+  const jbtn=document.getElementById('btnJiyinQuery'); if(jbtn&&on) jbtn.classList.remove('on');
   if(on && !sectorBoards.length) refreshSectorHeat();
   setTimeout(()=>{ if(on && sectorStocks.length) drawSectorLeaderK(sectorStocks); else if(chartState) drawChart(chartState.ticks, chartState.pc); },60);
 }
@@ -1530,11 +1548,21 @@ function openTrendStock(code){
   if(window.innerWidth<=768) setView('board');
 }
 function setDesktopTrend(on){
-  document.body.classList.toggle('trend-mode', !!on); if(on) document.body.classList.remove('sector-mode');
+  document.body.classList.toggle('trend-mode', !!on); if(on) document.body.classList.remove('sector-mode','jiyin-mode');
   const btn=document.getElementById('btnTrendQuery'); if(btn) btn.classList.toggle('on', !!on);
   const sbtn=document.getElementById('btnSectorHeat'); if(sbtn&&on) sbtn.classList.remove('on');
+  const jbtn=document.getElementById('btnJiyinQuery'); if(jbtn&&on) jbtn.classList.remove('on');
   if(on && !trendResults.length) trendScan();
   setTimeout(()=>{ if(on&&trendResults.length){ drawTrendMiniDailies(); } else if(chartState) drawChart(chartState.ticks, chartState.pc); },60);
+}
+
+function setDesktopJiyin(on){
+  document.body.classList.toggle('jiyin-mode', !!on); if(on) document.body.classList.remove('sector-mode','trend-mode');
+  const btn=document.getElementById('btnJiyinQuery'); if(btn) btn.classList.toggle('on', !!on);
+  const sbtn=document.getElementById('btnSectorHeat'); if(sbtn&&on) sbtn.classList.remove('on');
+  const tbtn=document.getElementById('btnTrendQuery'); if(tbtn&&on) tbtn.classList.remove('on');
+  if(on){ curStrat='jiyin'; document.querySelectorAll('.stg-btn').forEach(x=>x.classList.toggle('active', x.dataset.stg==='jiyin')); document.getElementById('stgTip').textContent=STRATS.jiyin.label+' · 日K+成交量 · 仅供参考不构成投资建议'; stratRenderCached(); }
+  setTimeout(()=>{ if(on&&curStrat==='jiyin'&&jiyinResults.length) drawJiyinMiniDailies(); else if(chartState) drawChart(chartState.ticks, chartState.pc); },60);
 }
 
 
@@ -1964,7 +1992,7 @@ function jiyinRender(){
         '<div class="pi-right"><div class="pi-price '+cls+'">'+s.close.toFixed(2)+'</div><div class="pi-sub '+cls+'">'+(s.chg>0?'+':'')+s.chg.toFixed(2)+'% <span class="pi-score">'+scoreTxt+'</span></div></div>'+
         '<span class="pi-add'+(inW?' added':'')+'">'+(inW?'✓':'＋')+'</span>';
     }
-    div.addEventListener('click', e=>{ if(e.target.classList.contains('pi-add')||e.target.classList.contains('lt-brain'))return; switchStock(s.code); });
+    div.addEventListener('click', e=>{ if(e.target.classList.contains('pi-add')||e.target.classList.contains('lt-brain'))return; switchStock(s.code); setDesktopJiyin(false); if(window.innerWidth<=768) setView('board'); });
     div.querySelector('.pi-add').addEventListener('click', e=>{ e.stopPropagation(); addFromPool(s); });
     box.appendChild(div);
   });
@@ -2018,7 +2046,7 @@ document.querySelectorAll('.src-btn').forEach(b=>b.addEventListener('click', ()=
   const src=b.dataset.src;
   document.querySelectorAll('.src-btn').forEach(x=>x.classList.toggle('active', x===b));
   document.getElementById('poolEtf').style.display = src==='etf'?'':'none';
-  document.getElementById('poolJiyin').style.display = src==='jiyin'?'':'none';
+  const pj=document.getElementById('poolJiyin'); if(pj) pj.style.display = src==='jiyin'?'':'none';
   if(src==='jiyin') stratRenderCached();  // 进选股: 显示上次结果
 }));
 // 策略切换
@@ -2956,6 +2984,7 @@ function setView(view){
   document.body.dataset.view=view;
   document.body.classList.remove('sector-mode');
   document.body.classList.remove('trend-mode');
+  document.body.classList.remove('jiyin-mode');
   document.querySelectorAll('.m-tab').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
   // 同步 tabWatch/tabPool 内联display, 避免内联样式压制 CSS 视图切换规则
   if(view==='watch'||view==='pool'){
@@ -2964,6 +2993,7 @@ function setView(view){
   }
   if(view==='pool'){ renderPool(); refreshPool(); }
   if(view==='sector'){ if(!sectorBoards.length) refreshSectorHeat(); else setTimeout(()=>drawSectorLeaderK(sectorStocks),60); }
+  if(view==='jiyin'){ setTimeout(()=>{ curStrat='jiyin'; document.querySelectorAll('.stg-btn').forEach(x=>x.classList.toggle('active', x.dataset.stg==='jiyin')); document.getElementById('stgTip').textContent=STRATS.jiyin.label+' · 日K+成交量 · 仅供参考不构成投资建议'; stratRenderCached(); if(jiyinResults.length) drawJiyinMiniDailies(); },60); }
   if(view==='trend'){ if(!trendResults.length) trendScan(); else setTimeout(drawTrendMiniDailies,60); }
   if(view==='board'){ setTimeout(()=>{ if(chartState) drawChart(chartState.ticks, chartState.pc); }, 50); }
   // iOS风格进入动画: 当前视图容器淡入上移(仅手机端)
@@ -2976,6 +3006,8 @@ document.querySelectorAll('.m-tab').forEach(b=>b.addEventListener('click', ()=>s
 document.getElementById('btnSectorHeat').onclick=()=>setDesktopSector(!document.body.classList.contains('sector-mode'));
 document.getElementById('btnSectorRefresh').onclick=refreshSectorHeat;
 document.getElementById('btnSectorBack').onclick=()=>{ setDesktopSector(false); if(window.innerWidth<=768) setView('board'); };
+document.getElementById('btnJiyinQuery').onclick=()=>setDesktopJiyin(!document.body.classList.contains('jiyin-mode'));
+document.getElementById('btnJiyinBack').onclick=()=>{ setDesktopJiyin(false); if(window.innerWidth<=768) setView('board'); };
 document.getElementById('btnTrendQuery').onclick=()=>setDesktopTrend(!document.body.classList.contains('trend-mode'));
 document.getElementById('btnTrendScan').onclick=trendScan;
 document.getElementById('btnTrendBack').onclick=()=>{ setDesktopTrend(false); if(window.innerWidth<=768) setView('board'); };
