@@ -1267,7 +1267,7 @@ function fbTrend(price, bars){
 }
 function fbMainlineInfo(pool){
   const counts={};
-  pool.forEach(s=>{ const code=emToCode(s.m,s.c); if(!isAMainBoard(code)) return; const bk=String(s.hybk||'其他'); counts[bk]=(counts[bk]||0)+1; });
+  pool.forEach(s=>{ const code=emCode(s.m,s.c); if(!isAMainBoard(code)) return; const bk=String(s.hybk||'其他'); counts[bk]=(counts[bk]||0)+1; });
   const ranked=Object.entries(counts).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
   const top3=ranked.slice(0,3).filter(x=>x[1]>=3).map(x=>x[0]);
   const rank=new Map(ranked.map((x,i)=>[x[0],{rank:i+1,count:x[1]}]));
@@ -1312,7 +1312,7 @@ async function refreshFirstBoard(){
   if(status) status.textContent='拉取当前涨停池…';
   try{
     const pool=await fetchZTPool();
-    const mainPool=pool.filter(s=>isAMainBoard(emToCode(s.m,s.c))&&!/ST|退/.test(String(s.n||'')));
+    const mainPool=pool.filter(s=>isAMainBoard(emCode(s.m,s.c))&&!/ST|退/.test(String(s.n||'')));
     const mainInfo=fbMainlineInfo(mainPool);
     const first=mainPool.filter(s=>fbBoardCount(s)===1&&fbTimeNum(s.fbt)>92500);
     const out=[]; const CHUNK=8;
