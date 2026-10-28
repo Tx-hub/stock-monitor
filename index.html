@@ -1274,7 +1274,7 @@ function fbMainlineInfo(pool){
   return {counts,rank,top3,ranked};
 }
 async function fbEnrich(s, mainInfo){
-  const code=emToCode(s.m,s.c), raw=await fetchQuote(code), p=raw?raw.split('~'):[];
+  const code=emCode(s.m,s.c), raw=await fetchQuote(code), p=raw?raw.split('~'):[];
   const price=+(parseFloat(p[3])||(+s.p||0)/1000).toFixed(2);
   const chg=+(parseFloat(p[32])||+s.zdp||0).toFixed(2);
   const turn=+(parseFloat(p[38])||+s.hs||0).toFixed(2);
