@@ -172,6 +172,11 @@
   .first-board-buy { color:#c08a1e; font-weight:600; }
   .first-board-sealed { color:#8a94a6; }
   .first-board-tip { margin-top:8px; line-height:1.6; }
+  .first-board-section { margin-top:14px; padding-top:10px; border-top:1px dashed #e3e8ef; }
+  .first-board-section h3 { font-size:13px; color:#3b82c4; margin-bottom:7px; }
+  .first-board-candidate { background:#fffdf5; }
+  .first-board-gap { color:#c08a1e; font-weight:800; }
+  .first-board-candidate-tip { margin-top:7px; line-height:1.6; }
   @media (max-width:768px){
     .first-board-table { min-width:900px; }
     #firstBoardPanel { margin-top:8px; }
@@ -436,6 +441,24 @@
       <span class="sector-status" id="firstBoardStatus">点击刷新，读取当前主板首板涨停池</span>
     </div>
     <div class="first-board-summary" id="firstBoardSummary"></div>
+    <div class="first-board-section">
+      <h3>🎯 临近涨停可买候选（尚未封板，距涨停≤3分钱）</h3>
+      <div class="sector-status" id="firstBoardCandidateStatus">扫描主板实时行情中…</div>
+      <div class="first-board-wrap">
+        <table class="first-board-table">
+          <thead>
+            <tr>
+              <th>#</th><th>个股</th><th>评分</th><th>板块</th><th>主线</th>
+              <th>现价</th><th>距涨停</th><th>量比</th><th>换手</th><th>趋势</th><th>提示</th>
+            </tr>
+          </thead>
+          <tbody id="firstBoardCandidateBody"></tbody>
+        </table>
+      </div>
+      <div class="tip first-board-candidate-tip">这里才是“差几分钱买”的候选池；已涨停的个股不会进入本表。收盘后没有未封板候选是正常现象，盘中9:30—10:30刷新更有意义。</div>
+    </div>
+    <div class="first-board-section">
+      <h3>📋 已涨停首板复盘（不可直接买入）</h3>
     <div class="first-board-wrap">
       <table class="first-board-table">
         <thead>
@@ -447,6 +470,7 @@
         </thead>
         <tbody id="firstBoardBody"></tbody>
       </table>
+    </div>
     </div>
     <div class="tip first-board-tip">评分为网页可取得字段的近似版：量比12、换手15、封流比20、时间18、趋势15、盘子10，共90分；筹码获利比例未接入。主线=当日主板涨停家数前3且不少于3只，仅作筛选，不代表买点。</div>
   </div>
@@ -1228,7 +1252,7 @@ async function loadLimitStats(){
 
 // ==================== 首板赢家 · 当前主板首板 Top ====================
 // 复用东方财富涨停池和腾讯实时行情；量比/趋势为网页可取得字段的近似值。
-let firstBoardResults=[], firstBoardLoading=false;
+let firstBoardResults=[], firstBoardCandidates=[], firstBoardLoading=false;
 function fbEsc(v){
   return String(v==null?'':v).replace(/[&<>'"]/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
 }
@@ -1288,6 +1312,47 @@ async function fbEnrich(s, mainInfo){
     fbt:s.fbt,zbc:+s.zbc||0,lbc:fbBoardCount(s),bk,sealFund,floatYi,sealFlow,
     mainline:bi.rank<=3&&bi.count>=3,sectorRank:bi.rank,sectorCount:bi.count,scores};
 }
+async function scanFirstBoardCandidates(mainInfo){
+  const d=await emFetch('qt/clist/get',{pn:1,pz:4000,po:1,np:1,fltt:2,invt:2,fid:'f3',fs:'m:1+t:2,m:0+t:6',fields:'f12,f14,f2,f3,f8,f18,f100,f6'});
+  const meta=((d&&d.data&&d.data.diff)||[]).filter(x=>{
+    const code=emToCode(x.f12), chg=+x.f3||0, name=String(x.f14||'');
+    return isAMainBoard(code)&&!/(ST|退)/.test(name)&&chg>=8.5&&chg<10.2;
+  });
+  const out=[]; const CHUNK=60;
+  for(let i=0;i<meta.length;i+=CHUNK){
+    const batch=meta.slice(i,i+CHUNK), quotes=await fetchQuoteBatch(batch.map(x=>emToCode(x.f12)));
+    batch.forEach(x=>{
+      const code=emToCode(x.f12), p=(quotes[code]||'').split('~');
+      const price=+(parseFloat(p[3])||+x.f2||0), prev=+(parseFloat(p[4])||+x.f18||0);
+      if(!(price>0)||!(prev>0)) return;
+      const limitPrice=Math.round(prev*1.10*100)/100, gapTicks=Math.round((limitPrice-price)*100);
+      if(gapTicks<1||gapTicks>3) return;
+      const bk=String(x.f100||'其他'), bi=mainInfo.rank.get(bk)||{rank:999,count:0};
+      const vr=+(parseFloat(p[49])||0), turn=+(parseFloat(p[38])||+x.f8||0),
+        mainline=bi.rank<=3&&bi.count>=3;
+      const distanceScore=gapTicks===1?18:(gapTicks===2?14:10);
+      const score=distanceScore+fbVolScore(vr)+fbTurnScore(turn)+(mainline?3:0);
+      out.push({code,name:x.f14||code,price,prev,limitPrice,gapTicks,vr,turn,bk,mainline,
+        sectorRank:bi.rank,sectorCount:bi.count,trend:'待核验',trendOk:false,score});
+    });
+  }
+  out.sort((a,b)=>b.score-a.score||Number(b.mainline)-Number(a.mainline)||a.gapTicks-b.gapTicks);
+  const top=out.slice(0,40), KCHUNK=8;
+  for(let i=0;i<top.length;i+=KCHUNK){
+    const rows=top.slice(i,i+KCHUNK);
+    await Promise.all(rows.map(async s=>{ try{ const bars=await jiyinKlineN(s.code,30); const t=fbTrend(s.price,bars); s.trend=t.text; s.trendOk=t.ok; s.score+=t.ok?15:0; }catch(e){} }));
+  }
+  return top.sort((a,b)=>b.score-a.score||Number(b.mainline)-Number(a.mainline)||a.gapTicks-b.gapTicks).slice(0,15);
+}
+function firstBoardCandidateRender(){
+  const body=document.getElementById('firstBoardCandidateBody'); if(!body) return;
+  if(!firstBoardCandidates.length){ body.innerHTML='<tr><td colspan="11" style="text-align:center;color:#8a94a6;padding:18px">当前没有尚未封板且距涨停3分钱内的主板个股</td></tr>'; return; }
+  body.innerHTML=firstBoardCandidates.map((s,i)=>{
+    const vr=Number.isFinite(s.vr)?s.vr.toFixed(2):'—', cls=s.mainline?'first-board-main':'first-board-nonmain';
+    return '<tr class="first-board-candidate"><td class="first-board-rank">'+(i+1)+'</td><td><span class="first-board-name" data-code="'+fbEsc(s.code)+'">'+fbEsc(s.name)+'</span><span class="first-board-code">'+fbEsc(s.code.toUpperCase())+'</span></td><td class="first-board-score">'+s.score+'/63</td><td>'+fbEsc(s.bk)+' <span style="color:#8a94a6">('+s.sectorCount+'板)</span></td><td class="'+cls+'">'+(s.mainline?'主线':'非主线')+'</td><td>'+s.price.toFixed(2)+'</td><td class="first-board-gap">'+s.gapTicks+'分钱</td><td>'+vr+'</td><td>'+s.turn.toFixed(2)+'%</td><td class="'+(s.trendOk?'first-board-main':'first-board-nonmain')+'">'+fbEsc(s.trend)+'</td><td class="first-board-buy">等待回封</td></tr>';
+  }).join('');
+  body.querySelectorAll('.first-board-name').forEach(el=>el.addEventListener('click',()=>{ switchStock(el.dataset.code); setDesktopFirstBoard(false); if(window.innerWidth<=768) setView('board'); }));
+}
 function firstBoardRender(){
   const body=document.getElementById('firstBoardBody'), summary=document.getElementById('firstBoardSummary');
   if(!body||!summary) return;
@@ -1314,6 +1379,16 @@ async function refreshFirstBoard(){
     const pool=await fetchZTPool();
     const mainPool=pool.filter(s=>isAMainBoard(emCode(s.m,s.c))&&!/ST|退/.test(String(s.n||'')));
     const mainInfo=fbMainlineInfo(mainPool);
+    const candidateStatus=document.getElementById('firstBoardCandidateStatus');
+    if(candidateStatus) candidateStatus.textContent='扫描主板实时行情，筛选距涨停3分钱内的未封板个股…';
+    try{
+      firstBoardCandidates=await scanFirstBoardCandidates(mainInfo);
+      firstBoardCandidateRender();
+      if(candidateStatus) candidateStatus.textContent='可买候选 '+firstBoardCandidates.length+' 只 · 当前仅显示未涨停个股';
+    }catch(e){
+      firstBoardCandidates=[]; firstBoardCandidateRender();
+      if(candidateStatus) candidateStatus.textContent='可买候选扫描失败：'+e.message;
+    }
     const first=mainPool.filter(s=>fbBoardCount(s)===1&&fbTimeNum(s.fbt)>92500);
     const out=[]; const CHUNK=8;
     for(let i=0;i<first.length;i+=CHUNK){
@@ -1328,7 +1403,7 @@ async function refreshFirstBoard(){
     if(status) status.textContent='已更新 '+new Date().toLocaleTimeString()+' · 主线候选：'+tops;
   }catch(e){
     if(status) status.textContent='首板赢家加载失败：'+e.message;
-    firstBoardResults=[]; firstBoardRender();
+    firstBoardResults=[]; firstBoardCandidates=[]; firstBoardCandidateRender(); firstBoardRender();
   }finally{ firstBoardLoading=false; }
 }
 function setDesktopFirstBoard(on){
