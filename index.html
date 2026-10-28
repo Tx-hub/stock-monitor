@@ -1312,28 +1312,53 @@ async function fbEnrich(s, mainInfo){
     fbt:s.fbt,zbc:+s.zbc||0,lbc:fbBoardCount(s),bk,sealFund,floatYi,sealFlow,
     mainline:bi.rank<=3&&bi.count>=3,sectorRank:bi.rank,sectorCount:bi.count,scores};
 }
+async function fbLoadMainboardQuotes(){
+  const cacheKey='fb_mainboard_universe_v1', today=new Date().toISOString().slice(0,10);
+  try{ const c=JSON.parse(localStorage.getItem(cacheKey)); if(c&&c.date===today&&c.list&&c.list.length) return c.list; }catch(e){}
+  const base='https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData';
+  const out=[];
+  for(const node of ['sh_a','sz_a']){
+    for(let page=1;page<=40;page++){
+      const url=base+'?'+new URLSearchParams({page,num:100,sort:'symbol',asc:1,node,symbol:'',_s_r_a:'page'});
+      const r=await fetch(url,{cache:'no-store'}), text=await r.text();
+      const arr=text.trim().startsWith('[')?JSON.parse(text):[];
+      if(!arr.length) break;
+      arr.forEach(x=>{
+        const code=String(x.symbol||'').toLowerCase(), name=String(x.name||'');
+        if(isAMainBoard(code)&&!/(ST|退)/.test(name)) out.push({code,name,price:+x.trade||0,prev:+x.settlement||0,chg:+x.changepercent||0,turn:+x.turnoverratio||0});
+      });
+      if(arr.length<100) break;
+    }
+  }
+  try{ localStorage.setItem(cacheKey,JSON.stringify({date:today,list:out})); }catch(e){}
+  return out;
+}
+async function fbTodaySectorMap(){
+  const date=todayYmdCompact(), map={};
+  const [zt,zb]=await Promise.all([emTopicPool('getTopicZTPool',date),emTopicPool('getTopicZBPool',date)]);
+  [(zt&&zt.pool)||[],(zb&&zb.pool)||[]].forEach(pool=>pool.forEach(s=>{
+    const code=emCode(s.m,s.c); if(code) map[code]={bk:String(s.hybk||'待核验'),lbc:fbBoardCount(s),zbc:+s.zbc||0};
+  }));
+  return map;
+}
 async function scanFirstBoardCandidates(mainInfo){
-  const d=await emFetch('qt/clist/get',{pn:1,pz:4000,po:1,np:1,fltt:2,invt:2,fid:'f3',fs:'m:1+t:2,m:0+t:6',fields:'f12,f14,f2,f3,f8,f18,f100,f6'});
-  const meta=((d&&d.data&&d.data.diff)||[]).filter(x=>{
-    const code=emToCode(x.f12), chg=+x.f3||0, name=String(x.f14||'');
-    return isAMainBoard(code)&&!/(ST|退)/.test(name)&&chg>=8.5&&chg<10.2;
-  });
-  const out=[]; const CHUNK=60;
-  for(let i=0;i<meta.length;i+=CHUNK){
-    const batch=meta.slice(i,i+CHUNK), quotes=await fetchQuoteBatch(batch.map(x=>emToCode(x.f12)));
+  const [meta,sectorMap]=await Promise.all([fbLoadMainboardQuotes(),fbTodaySectorMap()]);
+  const near=meta.filter(x=>x.chg>=8.5&&x.chg<10.2), out=[]; const CHUNK=60;
+  for(let i=0;i<near.length;i+=CHUNK){
+    const batch=near.slice(i,i+CHUNK), quotes=await fetchQuoteBatch(batch.map(x=>x.code));
     batch.forEach(x=>{
-      const code=emToCode(x.f12), p=(quotes[code]||'').split('~');
-      const price=+(parseFloat(p[3])||+x.f2||0), prev=+(parseFloat(p[4])||+x.f18||0);
+      const p=(quotes[x.code]||'').split('~');
+      const price=+(parseFloat(p[3])||x.price||0), prev=+(parseFloat(p[4])||x.prev||0);
       if(!(price>0)||!(prev>0)) return;
       const limitPrice=Math.round(prev*1.10*100)/100, gapTicks=Math.round((limitPrice-price)*100);
       if(gapTicks<1||gapTicks>3) return;
-      const bk=String(x.f100||'其他'), bi=mainInfo.rank.get(bk)||{rank:999,count:0};
-      const vr=+(parseFloat(p[49])||0), turn=+(parseFloat(p[38])||+x.f8||0),
-        mainline=bi.rank<=3&&bi.count>=3;
+      const sector=sectorMap[x.code], bk=sector?sector.bk:'待核验', bi=mainInfo.rank.get(bk);
+      const vr=+(parseFloat(p[49])||0), turn=+(parseFloat(p[38])||x.turn||0),
+        mainline=bi?(bi.rank<=3&&bi.count>=3):null;
       const distanceScore=gapTicks===1?18:(gapTicks===2?14:10);
-      const score=distanceScore+fbVolScore(vr)+fbTurnScore(turn)+(mainline?3:0);
-      out.push({code,name:x.f14||code,price,prev,limitPrice,gapTicks,vr,turn,bk,mainline,
-        sectorRank:bi.rank,sectorCount:bi.count,trend:'待核验',trendOk:false,score});
+      const score=distanceScore+fbVolScore(vr)+fbTurnScore(turn)+(mainline===true?3:0);
+      out.push({code:x.code,name:x.name,price,prev,limitPrice,gapTicks,vr,turn,bk,mainline,
+        sectorRank:bi?bi.rank:999,sectorCount:bi?bi.count:0,trend:'待核验',trendOk:false,score});
     });
   }
   out.sort((a,b)=>b.score-a.score||Number(b.mainline)-Number(a.mainline)||a.gapTicks-b.gapTicks);
@@ -1349,7 +1374,8 @@ function firstBoardCandidateRender(){
   if(!firstBoardCandidates.length){ body.innerHTML='<tr><td colspan="11" style="text-align:center;color:#8a94a6;padding:18px">当前没有尚未封板且距涨停3分钱内的主板个股</td></tr>'; return; }
   body.innerHTML=firstBoardCandidates.map((s,i)=>{
     const vr=Number.isFinite(s.vr)?s.vr.toFixed(2):'—', cls=s.mainline?'first-board-main':'first-board-nonmain';
-    return '<tr class="first-board-candidate"><td class="first-board-rank">'+(i+1)+'</td><td><span class="first-board-name" data-code="'+fbEsc(s.code)+'">'+fbEsc(s.name)+'</span><span class="first-board-code">'+fbEsc(s.code.toUpperCase())+'</span></td><td class="first-board-score">'+s.score+'/63</td><td>'+fbEsc(s.bk)+' <span style="color:#8a94a6">('+s.sectorCount+'板)</span></td><td class="'+cls+'">'+(s.mainline?'主线':'非主线')+'</td><td>'+s.price.toFixed(2)+'</td><td class="first-board-gap">'+s.gapTicks+'分钱</td><td>'+vr+'</td><td>'+s.turn.toFixed(2)+'%</td><td class="'+(s.trendOk?'first-board-main':'first-board-nonmain')+'">'+fbEsc(s.trend)+'</td><td class="first-board-buy">等待回封</td></tr>';
+    const mainText=s.mainline===null?'待核验':(s.mainline?'主线':'非主线');
+    return '<tr class="first-board-candidate"><td class="first-board-rank">'+(i+1)+'</td><td><span class="first-board-name" data-code="'+fbEsc(s.code)+'">'+fbEsc(s.name)+'</span><span class="first-board-code">'+fbEsc(s.code.toUpperCase())+'</span></td><td class="first-board-score">'+s.score+'/63</td><td>'+fbEsc(s.bk)+' <span style="color:#8a94a6">'+(s.sectorCount?'('+s.sectorCount+'板)':'')+'</span></td><td class="'+(s.mainline===null?'first-board-nonmain':cls)+'">'+mainText+'</td><td>'+s.price.toFixed(2)+'</td><td class="first-board-gap">'+s.gapTicks+'分钱</td><td>'+vr+'</td><td>'+s.turn.toFixed(2)+'%</td><td class="'+(s.trendOk?'first-board-main':'first-board-nonmain')+'">'+fbEsc(s.trend)+'</td><td class="first-board-buy">等待回封</td></tr>';
   }).join('');
   body.querySelectorAll('.first-board-name').forEach(el=>el.addEventListener('click',()=>{ switchStock(el.dataset.code); setDesktopFirstBoard(false); if(window.innerWidth<=768) setView('board'); }));
 }
