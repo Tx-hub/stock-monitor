@@ -153,6 +153,29 @@
   .sector-top { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
   .sector-top button.primary { background:#3b82c4; border-color:#3b82c4; color:#fff; font-weight:600; }
   .sector-status { font-size:12px; color:#8a94a6; }
+  .first-board-toolbar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+  .first-board-toolbar button.primary { background:#3b82c4; border-color:#3b82c4; color:#fff; font-weight:600; }
+  .first-board-summary { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .first-board-summary span { background:#f5f7fa; border:1px solid #e3e8ef; border-radius:999px; padding:4px 9px; font-size:11px; color:#3b4a5a; }
+  .first-board-wrap { overflow-x:auto; border:1px solid #eef1f5; border-radius:8px; }
+  .first-board-table { min-width:980px; font-size:12px; }
+  .first-board-table th { padding:7px 6px; text-align:left; background:#f8f9fc; color:#8a94a6; font-weight:600; white-space:nowrap; border-bottom:1px solid #e3e8ef; }
+  .first-board-table td { padding:7px 6px; white-space:nowrap; vertical-align:middle; }
+  .first-board-table tbody tr:hover { background:#f5f7fa; }
+  .first-board-rank { color:#3b82c4; font-weight:800; width:34px; }
+  .first-board-name { color:#1a2733; font-weight:700; cursor:pointer; }
+  .first-board-name:hover { color:#1a5a94; }
+  .first-board-code { color:#8a94a6; font-size:10px; margin-left:4px; }
+  .first-board-score { color:#e0475b; font-weight:800; }
+  .first-board-main { color:#159a5f; font-weight:700; }
+  .first-board-nonmain { color:#8a94a6; }
+  .first-board-buy { color:#c08a1e; font-weight:600; }
+  .first-board-sealed { color:#8a94a6; }
+  .first-board-tip { margin-top:8px; line-height:1.6; }
+  @media (max-width:768px){
+    .first-board-table { min-width:900px; }
+    #firstBoardPanel { margin-top:8px; }
+  }
   .sector-layout { display:grid; grid-template-columns:minmax(260px,360px) 1fr; gap:12px; align-items:start; }
   .sector-list { max-height:720px; overflow:auto; border:1px solid #eef1f5; border-radius:8px; background:#fbfcfe; padding:6px; }
   .sector-item { display:grid; grid-template-columns:1fr auto; gap:6px; padding:8px; border:1px solid transparent; border-radius:8px; cursor:pointer; margin-bottom:5px; }
@@ -399,9 +422,33 @@
     <button id="btnAnalyze">🧠 个股分析</button>
     <button id="btnMarketAnalyze">🌐 总指挥决策</button>
     <button id="btnSectorHeat">🔥 板块热度</button>
+    <button id="btnFirstBoard">⭐ 首板赢家</button>
     <button id="btnJiyinQuery">🌘 极阴尾排</button>
     <button id="btnTrendQuery">📊 趋势票</button>
     <span class="tip">数据源腾讯行情·完整分时·仅供参考不构成投资建议</span>
+  </div>
+
+  <div class="panel" id="firstBoardPanel" style="display:none">
+    <h2>⭐ 首板赢家 · 当前首板 Top</h2>
+    <div class="first-board-toolbar">
+      <button id="btnFirstBoardRefresh" class="primary">刷新首板赢家</button>
+      <button id="btnFirstBoardBack">返回盯盘</button>
+      <span class="sector-status" id="firstBoardStatus">点击刷新，读取当前主板首板涨停池</span>
+    </div>
+    <div class="first-board-summary" id="firstBoardSummary"></div>
+    <div class="first-board-wrap">
+      <table class="first-board-table">
+        <thead>
+          <tr>
+            <th>#</th><th>个股</th><th>评分</th><th>板块</th><th>主线</th>
+            <th>首封</th><th>量比</th><th>换手</th><th>封流比</th>
+            <th>趋势</th><th>板状态</th><th>提示</th>
+          </tr>
+        </thead>
+        <tbody id="firstBoardBody"></tbody>
+      </table>
+    </div>
+    <div class="tip first-board-tip">评分为网页可取得字段的近似版：量比12、换手15、封流比20、时间18、趋势15、盘子10，共90分；筹码获利比例未接入。主线=当日主板涨停家数前3且不少于3只，仅作筛选，不代表买点。</div>
   </div>
 
   <div class="panel" id="sectorPanel">
@@ -1178,6 +1225,120 @@ async function loadLimitStats(){
   limitStats={zt:(zt.pool||[]).filter(x=>isAMainBoard(emToCode(x.c))).length, zb:zb.tc||0, dt:dt.tc||0, byCode, byHy, high};
   return limitStats;
 }
+
+// ==================== 首板赢家 · 当前主板首板 Top ====================
+// 复用东方财富涨停池和腾讯实时行情；量比/趋势为网页可取得字段的近似值。
+let firstBoardResults=[], firstBoardLoading=false;
+function fbEsc(v){
+  return String(v==null?'':v).replace(/[&<>'"]/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+}
+function fbBoardCount(s){ return Number(s&&((s.lbc||0) || (s.zttj&&s.zttj.ct) || 1)); }
+function fbTimeNum(v){ const n=Number(v); return Number.isFinite(n)?n:999999; }
+function fbTimeText(v){ return fmtTime6(v); }
+function fbTimeScore(v){
+  const n=fbTimeNum(v), h=Math.floor(n/10000), m=Math.floor((n%10000)/100), mins=h*60+m-570;
+  if(mins<30) return 18; if(mins<90) return 12; if(mins<180) return 6; return 0;
+}
+function fbNowMinutes(){
+  const d=new Date(); return d.getHours()*60+d.getMinutes()+d.getSeconds()/60;
+}
+function fbVolScore(v){ return v>1.8?12:(v>1?6:0); }
+function fbTurnScore(v){ return v>3&&v<18?15:(v>2&&v<25?8:0); }
+function fbSealScore(v){ return v>0.015?20:(v>0.006?12:(v>0.002?5:0)); }
+function fbSizeScore(v){ return v>8&&v<120?10:0; }
+function fbVolumeRatio(rawVol, bars){
+  if(!(rawVol>0)||!bars||bars.length<3) return NaN;
+  const ymd=todayYmdCompact(), today=ymd.slice(0,4)+'-'+ymd.slice(4,6)+'-'+ymd.slice(6,8);
+  const hist=bars.filter(b=>!String(b.t||'').startsWith(today)).slice(-5);
+  const avg=hist.length?hist.reduce((a,b)=>a+(+b.v||0),0)/hist.length:0;
+  if(!(avg>0)) return NaN;
+  const elapsed=Math.max(10,Math.min(240,fbNowMinutes()-570));
+  return rawVol/avg/(elapsed/240);
+}
+function fbTrend(price, bars){
+  if(!(price>0)||!bars||bars.length<20) return {ok:false, text:'数据不足'};
+  const ymd=todayYmdCompact(), today=ymd.slice(0,4)+'-'+ymd.slice(4,6)+'-'+ymd.slice(6,8);
+  const hist=bars.filter(b=>!String(b.t||'').startsWith(today));
+  const closes=hist.slice(-19).map(b=>+b.c||0).concat([price]);
+  if(closes.length<20) return {ok:false, text:'数据不足'};
+  const ma=n=>closes.slice(-n).reduce((a,b)=>a+b,0)/n;
+  const ma5=ma(5),ma10=ma(10),ma20=ma(20),ok=ma5>ma10&&ma10>ma20&&price>ma5;
+  return {ok, text:ok?'上升':'非上升'};
+}
+function fbMainlineInfo(pool){
+  const counts={};
+  pool.forEach(s=>{ const code=emToCode(s.m,s.c); if(!isAMainBoard(code)) return; const bk=String(s.hybk||'其他'); counts[bk]=(counts[bk]||0)+1; });
+  const ranked=Object.entries(counts).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+  const top3=ranked.slice(0,3).filter(x=>x[1]>=3).map(x=>x[0]);
+  const rank=new Map(ranked.map((x,i)=>[x[0],{rank:i+1,count:x[1]}]));
+  return {counts,rank,top3,ranked};
+}
+async function fbEnrich(s, mainInfo){
+  const code=emToCode(s.m,s.c), raw=await fetchQuote(code), p=raw?raw.split('~'):[];
+  const price=+(parseFloat(p[3])||(+s.p||0)/1000).toFixed(2);
+  const chg=+(parseFloat(p[32])||+s.zdp||0).toFixed(2);
+  const turn=+(parseFloat(p[38])||+s.hs||0).toFixed(2);
+  const floatYi=(+s.ltsz||0)/1e8, sealFund=+s.fund||0, sealFlow=floatYi>0?sealFund/(floatYi*1e8):0;
+  let bars=[]; try{ bars=await jiyinKlineN(code,30)||[]; }catch(e){}
+  const vr=fbVolumeRatio(parseFloat(p[6]),bars), trend=fbTrend(price,bars);
+  const bk=String(s.hybk||'其他'), bi=mainInfo.rank.get(bk)||{rank:999,count:0};
+  const scores={volume:fbVolScore(vr),turn:fbTurnScore(turn),seal:fbSealScore(sealFlow),time:fbTimeScore(s.fbt),trend:trend.ok?15:0,size:fbSizeScore(floatYi)};
+  const score=Object.values(scores).reduce((a,b)=>a+b,0);
+  return {code,name:s.n||code,price,chg,turn,vr,trend:trend.text,trendOk:trend.ok,score,
+    fbt:s.fbt,zbc:+s.zbc||0,lbc:fbBoardCount(s),bk,sealFund,floatYi,sealFlow,
+    mainline:bi.rank<=3&&bi.count>=3,sectorRank:bi.rank,sectorCount:bi.count,scores};
+}
+function firstBoardRender(){
+  const body=document.getElementById('firstBoardBody'), summary=document.getElementById('firstBoardSummary');
+  if(!body||!summary) return;
+  const mainN=firstBoardResults.filter(x=>x.mainline).length;
+  summary.innerHTML='<span>首板 '+firstBoardResults.length+' 只</span><span>主线 '+mainN+' 只</span><span>显示 Top '+Math.min(15,firstBoardResults.length)+'</span><span>剔除9:25一字板</span>';
+  if(!firstBoardResults.length){ body.innerHTML='<tr><td colspan="12" style="text-align:center;color:#8a94a6;padding:18px">暂无符合条件的主板首板</td></tr>'; return; }
+  body.innerHTML=firstBoardResults.slice(0,15).map((s,i)=>{
+    const cls=s.mainline?'first-board-main':'first-board-nonmain';
+    const buy=s.zbc>0?'可观察回封':'已封死';
+    const buyCls=s.zbc>0?'first-board-buy':'first-board-sealed';
+    const vr=Number.isFinite(s.vr)?s.vr.toFixed(2):'—';
+    const flow=s.sealFlow?((s.sealFlow*100).toFixed(2)+'%'):'—';
+    const state=s.zbc>0?'炸板'+s.zbc+'次':'封板稳定';
+    return '<tr><td class="first-board-rank">'+(i+1)+'</td><td><span class="first-board-name" data-code="'+fbEsc(s.code)+'">'+fbEsc(s.name)+'</span><span class="first-board-code">'+fbEsc(s.code.toUpperCase())+'</span></td><td class="first-board-score">'+s.score+'/90</td><td>'+fbEsc(s.bk)+' <span style="color:#8a94a6">('+s.sectorCount+'板)</span></td><td class="'+cls+'">'+(s.mainline?'主线':'非主线')+'</td><td>'+fbTimeText(s.fbt)+'</td><td>'+vr+'</td><td>'+s.turn.toFixed(2)+'%</td><td>'+flow+'</td><td class="'+(s.trendOk?'first-board-main':'first-board-nonmain')+'">'+fbEsc(s.trend)+'</td><td>'+state+'</td><td class="'+buyCls+'">'+buy+'</td></tr>';
+  }).join('');
+  body.querySelectorAll('.first-board-name').forEach(el=>el.addEventListener('click',()=>{ switchStock(el.dataset.code); setDesktopFirstBoard(false); if(window.innerWidth<=768) setView('board'); }));
+}
+async function refreshFirstBoard(){
+  if(firstBoardLoading) return;
+  firstBoardLoading=true;
+  const status=document.getElementById('firstBoardStatus');
+  if(status) status.textContent='拉取当前涨停池…';
+  try{
+    const pool=await fetchZTPool();
+    const mainPool=pool.filter(s=>isAMainBoard(emToCode(s.m,s.c))&&!/ST|退/.test(String(s.n||'')));
+    const mainInfo=fbMainlineInfo(mainPool);
+    const first=mainPool.filter(s=>fbBoardCount(s)===1&&fbTimeNum(s.fbt)>92500);
+    const out=[]; const CHUNK=8;
+    for(let i=0;i<first.length;i+=CHUNK){
+      const batch=first.slice(i,i+CHUNK);
+      const rows=await Promise.all(batch.map(s=>fbEnrich(s,mainInfo).catch(()=>null)));
+      rows.forEach(x=>{if(x) out.push(x);});
+      if(status) status.textContent='计算首板赢家 '+Math.min(i+CHUNK,first.length)+'/'+first.length+'…';
+    }
+    out.sort((a,b)=>b.score-a.score||Number(b.mainline)-Number(a.mainline)||a.sectorRank-b.sectorRank||fbTimeNum(a.fbt)-fbTimeNum(b.fbt));
+    firstBoardResults=out; firstBoardRender();
+    const tops=mainInfo.top3.length?mainInfo.top3.join('、'):'暂无';
+    if(status) status.textContent='已更新 '+new Date().toLocaleTimeString()+' · 主线候选：'+tops;
+  }catch(e){
+    if(status) status.textContent='首板赢家加载失败：'+e.message;
+    firstBoardResults=[]; firstBoardRender();
+  }finally{ firstBoardLoading=false; }
+}
+function setDesktopFirstBoard(on){
+  const panel=document.getElementById('firstBoardPanel'), btn=document.getElementById('btnFirstBoard');
+  if(!panel) return;
+  if(on) document.body.classList.remove('sector-mode','trend-mode','jiyin-mode');
+  panel.style.display=on?'block':'none';
+  if(btn) btn.classList.toggle('on',!!on);
+  if(on && !firstBoardResults.length) refreshFirstBoard();
+}
 async function loadMarketGate(stats){
   let idxOk=false, idxTxt='上证/MA20 —';
   try{
@@ -1418,6 +1579,7 @@ async function refreshSectorHeat(){
   finally{ sectorLoading=false; }
 }
 function setDesktopSector(on){
+  if(on) setDesktopFirstBoard(false);
   document.body.classList.toggle('sector-mode', !!on);
   if(on) document.body.classList.remove('trend-mode','jiyin-mode');
   const btn=document.getElementById('btnSectorHeat'); if(btn) btn.classList.toggle('on', !!on);
@@ -1548,6 +1710,7 @@ function openTrendStock(code){
   if(window.innerWidth<=768) setView('board');
 }
 function setDesktopTrend(on){
+  if(on) setDesktopFirstBoard(false);
   document.body.classList.toggle('trend-mode', !!on); if(on) document.body.classList.remove('sector-mode','jiyin-mode');
   const btn=document.getElementById('btnTrendQuery'); if(btn) btn.classList.toggle('on', !!on);
   const sbtn=document.getElementById('btnSectorHeat'); if(sbtn&&on) sbtn.classList.remove('on');
@@ -1557,6 +1720,7 @@ function setDesktopTrend(on){
 }
 
 function setDesktopJiyin(on){
+  if(on) setDesktopFirstBoard(false);
   document.body.classList.toggle('jiyin-mode', !!on); if(on) document.body.classList.remove('sector-mode','trend-mode');
   const btn=document.getElementById('btnJiyinQuery'); if(btn) btn.classList.toggle('on', !!on);
   const sbtn=document.getElementById('btnSectorHeat'); if(sbtn&&on) sbtn.classList.remove('on');
@@ -3006,6 +3170,9 @@ document.querySelectorAll('.m-tab').forEach(b=>b.addEventListener('click', ()=>s
 document.getElementById('btnSectorHeat').onclick=()=>setDesktopSector(!document.body.classList.contains('sector-mode'));
 document.getElementById('btnSectorRefresh').onclick=refreshSectorHeat;
 document.getElementById('btnSectorBack').onclick=()=>{ setDesktopSector(false); if(window.innerWidth<=768) setView('board'); };
+document.getElementById('btnFirstBoard').onclick=()=>setDesktopFirstBoard(document.getElementById('firstBoardPanel').style.display==='none');
+document.getElementById('btnFirstBoardRefresh').onclick=refreshFirstBoard;
+document.getElementById('btnFirstBoardBack').onclick=()=>setDesktopFirstBoard(false);
 document.getElementById('btnJiyinQuery').onclick=()=>setDesktopJiyin(!document.body.classList.contains('jiyin-mode'));
 document.getElementById('btnJiyinBack').onclick=()=>{ setDesktopJiyin(false); if(window.innerWidth<=768) setView('board'); };
 document.getElementById('btnTrendQuery').onclick=()=>setDesktopTrend(!document.body.classList.contains('trend-mode'));
