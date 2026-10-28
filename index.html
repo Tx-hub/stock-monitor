@@ -1317,18 +1317,34 @@ async function fbLoadMainboardQuotes(){
   try{ const c=JSON.parse(localStorage.getItem(cacheKey)); if(c&&c.date===today&&c.list&&c.list.length) return c.list; }catch(e){}
   const base='https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData';
   const out=[];
-  for(const node of ['sh_a','sz_a']){
-    for(let page=1;page<=40;page++){
-      const url=base+'?'+new URLSearchParams({page,num:100,sort:'symbol',asc:1,node,symbol:'',_s_r_a:'page'});
-      const r=await fetch(url,{cache:'no-store'}), text=await r.text();
-      const arr=text.trim().startsWith('[')?JSON.parse(text):[];
-      if(!arr.length) break;
-      arr.forEach(x=>{
-        const code=String(x.symbol||'').toLowerCase(), name=String(x.name||'');
-        if(isAMainBoard(code)&&!/(ST|退)/.test(name)) out.push({code,name,price:+x.trade||0,prev:+x.settlement||0,chg:+x.changepercent||0,turn:+x.turnoverratio||0});
-      });
-      if(arr.length<100) break;
+  try{
+    for(const node of ['sh_a','sz_a']){
+      for(let page=1;page<=40;page++){
+        const url=base+'?'+new URLSearchParams({page,num:100,sort:'symbol',asc:1,node,symbol:'',_s_r_a:'page'});
+        const r=await fetch(url,{cache:'no-store'}), text=await r.text();
+        const arr=text.trim().startsWith('[')?JSON.parse(text):[];
+        if(!arr.length) break;
+        arr.forEach(x=>{
+          const code=String(x.symbol||'').toLowerCase(), name=String(x.name||'');
+          if(isAMainBoard(code)&&!/(ST|退)/.test(name)) out.push({code,name,price:+x.trade||0,prev:+x.settlement||0,chg:+x.changepercent||0,turn:+x.turnoverratio||0});
+        });
+        if(arr.length<100) break;
+      }
     }
+    if(out.length){ try{ localStorage.setItem(cacheKey,JSON.stringify({date:today,list:out})); }catch(e){} return out; }
+  }catch(e){ /* GitHub Pages 可能拦截新浪跨域，转腾讯代码范围兜底 */ }
+  const codes=[];
+  for(let n=600000;n<=605999;n++) codes.push('sh'+String(n));
+  for(let n=1;n<=3999;n++) codes.push('sz'+String(n).padStart(6,'0'));
+  for(let i=0;i<codes.length;i+=500){
+    const quotes=await fetchQuoteBatch(codes.slice(i,i+500));
+    Object.entries(quotes).forEach(([code,raw])=>{
+      if(!isAMainBoard(code)) return;
+      const p=String(raw||'').split('~'), name=String(p[1]||'');
+      if(!name||/(ST|退)/.test(name)) return;
+      const price=+p[3]||0, prev=+p[4]||0;
+      if(price>0&&prev>0) out.push({code,name,price,prev,chg:+p[32]||0,turn:+p[38]||0});
+    });
   }
   try{ localStorage.setItem(cacheKey,JSON.stringify({date:today,list:out})); }catch(e){}
   return out;
