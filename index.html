@@ -1346,8 +1346,9 @@ async function fbLoadMainboardQuotes(){
       if(price>0&&prev>0) out.push({code,name,price,prev,chg:+p[32]||0,turn:+p[38]||0});
     });
   }
-  try{ localStorage.setItem(cacheKey,JSON.stringify({date:today,list:out})); }catch(e){}
-  return out;
+  const unique=Array.from(new Map(out.map(x=>[x.code,x])).values());
+  try{ localStorage.setItem(cacheKey,JSON.stringify({date:today,list:unique})); }catch(e){}
+  return unique;
 }
 async function fbTodaySectorMap(){
   const date=todayYmdCompact(), map={};
