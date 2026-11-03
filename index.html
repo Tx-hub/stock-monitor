@@ -89,6 +89,42 @@
   .card .val { font-size:20px; font-weight:600; margin-top:2px; color:#1a2733; }
   .up { color:#e0475b; } .down { color:#1aae6f; } .flat{color:#1a2733;}
   .panel { background:#ffffff; border:1px solid #e3e8ef; border-radius:10px; padding:12px; margin-bottom:12px; box-shadow:0 1px 3px rgba(60,80,120,.06); }
+  /* ===== 野人交易决策驾驶舱 ===== */
+  .decision-panel { border-top:3px solid #3b82c4; }
+  .decision-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:10px; }
+  .decision-head h2 { margin:0; color:#1a2733; }
+  .decision-head p { color:#8a94a6; font-size:11px; margin-top:3px; }
+  .decision-actions { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+  .decision-actions button { font-size:12px; padding:6px 9px; }
+  .decision-actions .primary { background:#3b82c4; border-color:#3b82c4; color:#fff; font-weight:600; }
+  .decision-state { display:grid; grid-template-columns:1.15fr repeat(4,1fr); gap:8px; margin-bottom:10px; }
+  .decision-state-card { background:#f8f9fc; border:1px solid #e3e8ef; border-radius:8px; padding:9px 10px; min-height:62px; }
+  .decision-state-card .ds-label { color:#8a94a6; font-size:11px; }
+  .decision-state-card .ds-value { color:#1a2733; font-size:16px; font-weight:800; margin-top:4px; }
+  .decision-state-card .ds-sub { color:#8a94a6; font-size:10px; margin-top:2px; line-height:1.4; }
+  .decision-state-card.green { background:#eafaf1; border-color:#a3e4c4; }
+  .decision-state-card.yellow { background:#fff8e8; border-color:#f5e0a8; }
+  .decision-state-card.red { background:#fdecee; border-color:#f4b8c0; }
+  .decision-state-card.green .ds-value { color:#159a5f; }
+  .decision-state-card.yellow .ds-value { color:#8a5b00; }
+  .decision-state-card.red .ds-value { color:#d63a4d; }
+  .decision-focus { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:8px; }
+  .focus-card { border:1px solid #e3e8ef; border-radius:8px; padding:9px 10px; background:#fff; cursor:pointer; transition:transform .15s,box-shadow .15s; }
+  .focus-card:hover { transform:translateY(-1px); box-shadow:0 3px 12px rgba(60,80,120,.10); }
+  .focus-card.focus-a { border-color:#f5e0a8; background:#fffdf5; }
+  .focus-card.focus-b { border-color:#bcd7f2; background:#f8fbff; }
+  .focus-top { display:flex; justify-content:space-between; gap:8px; align-items:flex-start; }
+  .focus-name { color:#1a2733; font-weight:800; font-size:14px; }
+  .focus-code { color:#8a94a6; font-size:10px; margin-left:4px; }
+  .focus-score { color:#3b82c4; font-weight:800; font-size:14px; }
+  .focus-meta { color:#8a94a6; font-size:11px; margin-top:3px; }
+  .focus-line { font-size:11px; line-height:1.55; margin-top:6px; }
+  .focus-buy { color:#159a5f; }
+  .focus-sell { color:#d63a4d; }
+  .focus-status { color:#8a5b00; font-weight:700; }
+  .decision-empty { padding:16px; border:1px dashed #d5dce6; border-radius:8px; color:#8a94a6; font-size:12px; line-height:1.7; text-align:center; }
+  .decision-foot { color:#8a94a6; font-size:11px; line-height:1.6; margin-top:9px; }
+  @media (max-width:900px){ .decision-state { grid-template-columns:repeat(2,1fr); } .decision-state-card:first-child { grid-column:1/-1; } .decision-head { flex-direction:column; } .decision-actions { justify-content:flex-start; } }
   .panel h2 { font-size:14px; margin-bottom:8px; color:#3b82c4; }
   #chart { width:100%; height:220px; display:block; background:#fbfcfe; border-radius:6px; border:1px solid #eef1f5; }
   #rsiChart { width:100%; height:100px; display:block; background:#fbfcfe; border-radius:6px; border:1px solid #eef1f5; }
@@ -431,6 +467,30 @@
     <button id="btnJiyinQuery">🌘 极阴尾排</button>
     <button id="btnTrendQuery">📊 趋势票</button>
     <span class="tip">数据源腾讯行情·完整分时·仅供参考不构成投资建议</span>
+  </div>
+
+  <div class="panel decision-panel" id="decisionPanel">
+    <div class="decision-head">
+      <div>
+        <h2>🎯 主板交易决策驾驶舱</h2>
+        <p>先看当前状态，再看关注票；未满足触发条件时默认不买。</p>
+      </div>
+      <div class="decision-actions">
+        <button id="btnDecisionRefresh" class="primary">刷新决策面板</button>
+        <button id="btnDecisionSector">看板块</button>
+        <button id="btnDecisionTrend">看趋势</button>
+        <button id="btnDecisionFirst">看首板</button>
+      </div>
+    </div>
+    <div class="decision-state" id="decisionState">
+      <div class="decision-state-card yellow"><div class="ds-label">总开关</div><div class="ds-value">等待扫描</div><div class="ds-sub">先刷新主板数据</div></div>
+      <div class="decision-state-card"><div class="ds-label">市场阶段</div><div class="ds-value">—</div><div class="ds-sub">指数 / 情绪</div></div>
+      <div class="decision-state-card"><div class="ds-label">主线</div><div class="ds-value">—</div><div class="ds-sub">板块热度</div></div>
+      <div class="decision-state-card"><div class="ds-label">关注数量</div><div class="ds-value">0</div><div class="ds-sub">仅显示主板</div></div>
+      <div class="decision-state-card"><div class="ds-label">建议仓位</div><div class="ds-value">0%</div><div class="ds-sub">未确认不建仓</div></div>
+    </div>
+    <div id="decisionFocus" class="decision-empty">点击“刷新决策面板”，扫描主板首板和趋势候选。<br>面板会给出：当前状态、关注标的、买入触发、卖出/失效条件。</div>
+    <div class="decision-foot">规则：只看沪深主板，排除ST；关注票不等于立即买入，必须等触发条件成立。单笔风险建议不超过账户净值0.5%—1%。</div>
   </div>
 
   <div class="panel" id="firstBoardPanel" style="display:none">
@@ -1412,6 +1472,56 @@ function firstBoardRender(){
     return '<tr><td class="first-board-rank">'+(i+1)+'</td><td><span class="first-board-name" data-code="'+fbEsc(s.code)+'">'+fbEsc(s.name)+'</span><span class="first-board-code">'+fbEsc(s.code.toUpperCase())+'</span></td><td class="first-board-score">'+s.score+'/90</td><td>'+fbEsc(s.bk)+' <span style="color:#8a94a6">('+s.sectorCount+'板)</span></td><td class="'+cls+'">'+(s.mainline?'主线':'非主线')+'</td><td>'+fbTimeText(s.fbt)+'</td><td>'+vr+'</td><td>'+s.turn.toFixed(2)+'%</td><td>'+flow+'</td><td class="'+(s.trendOk?'first-board-main':'first-board-nonmain')+'">'+fbEsc(s.trend)+'</td><td>'+state+'</td><td class="'+buyCls+'">'+buy+'</td></tr>';
   }).join('');
   body.querySelectorAll('.first-board-name').forEach(el=>el.addEventListener('click',()=>{ switchStock(el.dataset.code); setDesktopFirstBoard(false); if(window.innerWidth<=768) setView('board'); }));
+  renderDecisionCockpit();
+}
+
+// ==================== 主板交易决策驾驶舱 ====================
+function decisionEsc(v){
+  return String(v==null?'':v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function decisionFocusCard(s, kind){
+  const candidate=kind==='candidate';
+  const price=s.price!=null?Number(s.price).toFixed(2):'—';
+  const score=s.score!=null?s.score+'分':'观察';
+  const buy=candidate?'触发：放量回封，且板块继续强；不追已封死涨停':'触发：分歧后缩量回踩，重新站回关键均线/均价线';
+  const sell=candidate?'失效：炸板不回封、跌破今日低点或板块转弱':'失效：放量滞涨、核心股负反馈或跌破结构位';
+  const state=candidate?'未触发 · 等回封':'观察 · 等回踩确认';
+  const cls=candidate?'focus-a':'focus-b';
+  return '<div class="focus-card '+cls+'" data-code="'+decisionEsc(s.code)+'">'+
+    '<div class="focus-top"><div><span class="focus-name">'+decisionEsc(s.name||s.code)+'</span><span class="focus-code">'+decisionEsc(String(s.code||'').toUpperCase())+'</span></div><span class="focus-score">'+decisionEsc(score)+'</span></div>'+ 
+    '<div class="focus-meta">'+decisionEsc(s.bk||'主板候选')+' · 现价 '+price+' · <span class="focus-status">'+state+'</span></div>'+ 
+    '<div class="focus-line focus-buy">'+decisionEsc(buy)+'</div>'+ 
+    '<div class="focus-line focus-sell">'+decisionEsc(sell)+'</div>'+ 
+    '</div>';
+}
+function renderDecisionCockpit(){
+  const state=document.getElementById('decisionState'), box=document.getElementById('decisionFocus');
+  if(!state||!box) return;
+  const candidates=(firstBoardCandidates||[]).filter(s=>isAMainBoard(s.code)&&!/(ST|退)/i.test(s.name||''));
+  const winners=(firstBoardResults||[]).filter(s=>isAMainBoard(s.code)&&!/(ST|退)/i.test(s.name||''));
+  const rows=[...candidates.slice(0,3).map(s=>({s,kind:'candidate'})),...winners.slice(0,3).map(s=>({s,kind:'winner'}))].slice(0,6);
+  const gate=sectorGate||{};
+  let level=gate.level||'yellow', title=gate.title||((firstBoardLoading||!rows.length)?'等待扫描':'轻仓等待'), phase=gate.level==='red'?'退潮/仅观察':(gate.level==='green'?'可轻仓观察':'分歧等待');
+  if(!rows.length && !firstBoardLoading){ level='yellow'; title='等待扫描'; phase='数据未更新'; }
+  const mainNames=Array.from(new Set(rows.map(x=>x.s.bk).filter(Boolean))).slice(0,2).join('、')||'待扫描';
+  const pos=level==='green'?'≤30%':(level==='yellow'?'≤10%':'0%');
+  const label=title.replace(/^[^：]+：/,'')||title;
+  state.innerHTML='<div class="decision-state-card '+level+'"><div class="ds-label">总开关</div><div class="ds-value">'+decisionEsc(label)+'</div><div class="ds-sub">'+decisionEsc(gate.reason||'先扫描主板候选')+'</div></div>'+ 
+    '<div class="decision-state-card '+level+'"><div class="ds-label">市场阶段</div><div class="ds-value">'+decisionEsc(phase)+'</div><div class="ds-sub">'+(gate.idxTxt?decisionEsc(gate.idxTxt):'指数状态待核验')+'</div></div>'+ 
+    '<div class="decision-state-card"><div class="ds-label">主线候选</div><div class="ds-value" style="font-size:14px">'+decisionEsc(mainNames)+'</div><div class="ds-sub">按主板涨停/热度筛选</div></div>'+ 
+    '<div class="decision-state-card"><div class="ds-label">关注数量</div><div class="ds-value">'+rows.length+'</div><div class="ds-sub">只显示主板非ST</div></div>'+ 
+    '<div class="decision-state-card '+(pos==='0%'?'red':(pos==='≤10%'?'yellow':'green'))+'"><div class="ds-label">建议总仓位上限</div><div class="ds-value">'+pos+'</div><div class="ds-sub">未触发买点不建仓</div></div>';
+  if(!rows.length){ box.className='decision-empty'; box.innerHTML=firstBoardLoading?'正在扫描主板涨停池和趋势结构…':'点击“刷新决策面板”，扫描当前主板候选。'; return; }
+  box.className='decision-focus';
+  box.innerHTML=rows.map(x=>decisionFocusCard(x.s,x.kind)).join('');
+  box.querySelectorAll('.focus-card').forEach(el=>el.addEventListener('click',()=>{ switchStock(el.dataset.code); if(window.innerWidth<=768) setView('board'); }));
+}
+async function refreshDecisionCockpit(){
+  if(firstBoardLoading) return;
+  const btn=document.getElementById('btnDecisionRefresh');
+  if(btn){ btn.disabled=true; btn.textContent='扫描中…'; }
+  firstBoardCandidates=[]; firstBoardResults=[]; renderDecisionCockpit();
+  try{ await refreshFirstBoard(); }finally{ if(btn){ btn.disabled=false; btn.textContent='刷新决策面板'; } renderDecisionCockpit(); }
 }
 async function refreshFirstBoard(){
   if(firstBoardLoading) return;
@@ -3291,6 +3401,10 @@ document.getElementById('btnSectorBack').onclick=()=>{ setDesktopSector(false); 
 document.getElementById('btnFirstBoard').onclick=()=>setDesktopFirstBoard(document.getElementById('firstBoardPanel').style.display==='none');
 document.getElementById('btnFirstBoardRefresh').onclick=refreshFirstBoard;
 document.getElementById('btnFirstBoardBack').onclick=()=>setDesktopFirstBoard(false);
+document.getElementById('btnDecisionRefresh').onclick=refreshDecisionCockpit;
+document.getElementById('btnDecisionSector').onclick=()=>setDesktopSector(true);
+document.getElementById('btnDecisionTrend').onclick=()=>setDesktopTrend(true);
+document.getElementById('btnDecisionFirst').onclick=()=>setDesktopFirstBoard(true);
 document.getElementById('btnJiyinQuery').onclick=()=>setDesktopJiyin(!document.body.classList.contains('jiyin-mode'));
 document.getElementById('btnJiyinBack').onclick=()=>{ setDesktopJiyin(false); if(window.innerWidth<=768) setView('board'); };
 document.getElementById('btnTrendQuery').onclick=()=>setDesktopTrend(!document.body.classList.contains('trend-mode'));
